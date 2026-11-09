@@ -10,8 +10,9 @@
 #
 # Endpoints (all need header X-TV-Token):
 #   GET  /ping                      helper is up
-#   GET  /config/{apps|keymap|settings}
+#   GET  /config/{apps|keymap|settings|wec-schedule}
 #   POST /settings                  merge a JSON object into config/settings.json
+#   GET  /cache/{name}, POST /cache/{name}   offline copy of downloaded data (the F1 calendar)
 #   POST /launch/{appId}            open an app from config/apps.json
 #   POST /home                      tv.ahk asks what to do with the window in front (close / minimize)
 #   GET  /keys?since=N, POST /keys  keys seen by tv.ahk, for the key-test page
@@ -51,6 +52,8 @@ $LastLaunched = $null
 $LauncherProc = $null
 $AllowedOrigins = @('null', 'http://localhost:8080', 'http://127.0.0.1:8080')   # file:// pages, and the dev server
 $SleepTimerFile = Join-Path $TV.Data 'sleep-timer.json'
+$CacheDir = Join-Path $TV.Data 'cache'
+if (-not (Test-Path $CacheDir)) { New-Item -ItemType Directory -Force $CacheDir | Out-Null }
 $SleepTimer = Read-JsonFile $SleepTimerFile       # {endsAt (ISO), action, minutes} or null; survives a helper restart
 $SettingsPages = @{ wifi = 'ms-settings:network-wifi'; bluetooth = 'ms-settings:bluetooth'; sound = 'ms-settings:sound' }
 
@@ -369,9 +372,9 @@ function Send-Response {
 }
 
 function Read-Body {
-    param($ctx)
+    param($ctx, [long]$MaxBytes = 65536)
     if (-not $ctx.Request.HasEntityBody) { return $null }
-    if ($ctx.Request.ContentLength64 -gt 65536) { throw 'body too large' }
+    if ($ctx.Request.ContentLength64 -gt $MaxBytes) { throw 'body too large' }
     $r = New-Object IO.StreamReader($ctx.Request.InputStream, [Text.Encoding]::UTF8)
     $text = $r.ReadToEnd(); $r.Close()
     if (-not $text.Trim()) { return $null }
@@ -397,11 +400,26 @@ function Handle-Request {
     switch -Regex ("$method $path") {
         '^GET /ping$' { Send-Response $ctx 200 @{ ok = $true; version = $TV.Version; testMode = [bool]$TestMode }; return }
 
-        '^GET /config/(apps|keymap|settings)$' {
+        '^GET /config/(apps|keymap|settings|wec-schedule)$' {
             $file = Join-Path $TV.Config "$($Matches[1]).json"
             Send-Response $ctx 200 ([IO.File]::ReadAllText($file, [Text.Encoding]::UTF8)); return
         }
         '^POST /settings$' { $s = Update-Settings (Read-Body $ctx); Send-Response $ctx 200 $s; return }
+
+        # Offline copies of downloaded data (the F1 calendar), kept in %LOCALAPPDATA%\TVLauncher\cache.
+        '^GET /cache/([\w-]+)$' {
+            $file = Join-Path $CacheDir "$($Matches[1]).json"
+            if (Test-Path $file) { Send-Response $ctx 200 ([IO.File]::ReadAllText($file, [Text.Encoding]::UTF8)) }
+            else { Send-Response $ctx 404 @{ error = 'not cached' } }
+            return
+        }
+        '^POST /cache/([\w-]+)$' {
+            $name = $Matches[1]
+            $body = Read-Body $ctx 1048576
+            if ($null -eq $body) { Send-Response $ctx 400 @{ error = 'empty' }; return }
+            Write-TextAtomic (Join-Path $CacheDir "$name.json") ($body | ConvertTo-Json -Depth 10 -Compress)
+            Send-Response $ctx 204 $null; return
+        }
 
         '^POST /launch/([\w-]+)$' {
             $id = $Matches[1]

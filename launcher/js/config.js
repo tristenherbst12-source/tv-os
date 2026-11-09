@@ -73,6 +73,8 @@ window.TV = window.TV || {};
 
   TV.config = {
     sources: {},
+    load,              // one config file by name, e.g. 'wec-schedule' -> {value, source}
+    cacheGet, cacheSet,
     async loadAll() {
       const names = ['apps', 'keymap', 'settings'];
       const out = {};

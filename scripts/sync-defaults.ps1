@@ -5,7 +5,7 @@ $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $PSScriptRoot
 $out  = Join-Path $root 'launcher\js\defaults.js'
 
-$parts = foreach ($name in 'apps', 'keymap', 'settings') {
+$parts = foreach ($name in 'apps', 'keymap', 'settings', 'wec-schedule') {
     $json = Get-Content -Raw -Encoding UTF8 (Join-Path $root "config\$name.json")
     $null = $json | ConvertFrom-Json   # fail loudly on invalid JSON
     "  `"$name`": $($json.Trim())"

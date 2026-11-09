@@ -4,9 +4,7 @@
   const launcherRoot = new URL('../', document.currentScript.src).href;
 
   /* Pages that are not built yet. Remove an entry when its stage lands. */
-  const NOT_YET = {
-    races:    'Arrives in Stage 4'
-  };
+  const NOT_YET = {};
   const FOCUS_KEY = 'tv.home.focus';   // tile to focus when coming back (e.g. from Settings)
 
   let cfg, grid = [], rows = [], fr = 0, fc = 0, busy = false;

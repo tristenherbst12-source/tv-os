@@ -1,0 +1,240 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Race Calendar</title>
+<link rel="preload" href="../fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../css/launcher.css">
+<link rel="stylesheet" href="../css/pages.css">
+</head>
+<body>
+<div class="wall"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div></div>
+<div class="vignette"></div>
+
+<main class="screen">
+  <header class="page-head">
+    <div class="page-title">Race Calendar</div>
+    <div class="page-sub" id="sub">Formula 1 and World Endurance</div>
+    <div class="race-filter"><div class="seg" id="filter"></div></div>
+    <div class="status">
+      <div class="pill" id="f1state">Loading…</div>
+      <div class="pill"><span class="clock-small" id="clock">--:--</span></div>
+    </div>
+  </header>
+
+  <section class="hero empty" id="hero"><div class="info"><div class="what">Loading the Calendar…</div></div></section>
+  <section class="list race-list" id="list"></section>
+
+  <div class="hints">
+    <span><span class="key">▲ ▼</span>Scroll</span>
+    <span><span class="key">◀ ▶</span>All / F1 / WEC</span>
+    <span><span class="key">Back</span>Home</span>
+  </div>
+</main>
+
+<script src="../js/helper-token.js"></script>
+<script src="../js/defaults.js"></script>
+<script src="../js/glyphs.js"></script>
+<script src="../js/themes.js"></script>
+<script src="../js/wallpaper.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/keys.js"></script>
+<script src="../js/ui.js"></script>
+<script src="../js/races.js"></script>
+<script>
+(async function () {
+  const { el } = TV.ui;
+  const $ = id => document.getElementById(id);
+  const FILTERS = ['All', 'F1', 'WEC'];
+  const ACCENT = { F1: '#e10600', WEC: '#2f7bff' };
+  const FILTER_KEY = 'tv.races.filter';
+  const MAX_ROWS = 150;
+
+  let all = [], f1info = null, shown = [], rows = [], focused = 0, focusId = null;
+  let filter = 'All';
+  try { filter = FILTERS.includes(localStorage.getItem(FILTER_KEY)) ? localStorage.getItem(FILTER_KEY) : 'All'; } catch (e) { /* blocked */ }
+
+  /* ---------- formatting (the PC's own time zone: SAST on the TV) ---------- */
+  const tzName = (() => {
+    try { return new Intl.DateTimeFormat('en-ZA', { timeZoneName: 'short' }).formatToParts(new Date())
+      .find(p => p.type === 'timeZoneName').value; } catch (e) { return 'Local Time'; }
+  })();
+  const time = d => d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+  const dayKey = d => d.getFullYear() + '-' + d.getMonth() + '-' + d.getDate();
+  function dayLabel(d) {
+    const now = new Date(), tmr = new Date(now.getTime() + 864e5);
+    if (dayKey(d) === dayKey(now)) return 'Today';
+    if (dayKey(d) === dayKey(tmr)) return 'Tomorrow';
+    const o = { weekday: 'long', day: 'numeric', month: 'long' };
+    if (d.getFullYear() !== now.getFullYear()) o.year = 'numeric';
+    return d.toLocaleDateString('en-GB', o);
+  }
+  const shortDay = d => d.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+  const isLive = (s, now) => s.timeKnown && s.start <= now && now < s.end;
+
+  /* ---------- filter ---------- */
+  function drawFilter() {
+    const seg = $('filter');
+    seg.innerHTML = '';
+    FILTERS.forEach(f => {
+      const s = el('span', f === filter ? 'on' : '', f);
+      s.addEventListener('click', () => setFilter(f));
+      seg.appendChild(s);
+    });
+  }
+  function setFilter(f) {
+    if (f === filter) return;
+    filter = f;
+    try { localStorage.setItem(FILTER_KEY, f); } catch (e) { /* blocked */ }
+    focusId = null;
+    drawFilter(); render();
+  }
+
+  /* ---------- hero: the next (or live) session ---------- */
+  function drawHero(now) {
+    const h = $('hero');
+    const s = shown[0];
+    if (!s) {
+      h.className = 'hero empty';
+      h._id = null;
+      h.style.setProperty('--accent', 'rgba(255,255,255,.18)');
+      h.innerHTML = '';
+      const info = el('div', 'info');
+      info.append(el('div', 'what', 'No Upcoming Sessions'),
+        el('div', 'when', f1info && f1info.state === 'none' && filter !== 'WEC'
+          ? 'The F1 Calendar Needs the Internet Once' : 'Check Back When the Next Season Is Announced'));
+      h.appendChild(info);
+      return;
+    }
+    if (h._id !== s.id) {
+      h._id = s.id;
+      h.className = 'hero';
+      h.style.setProperty('--accent', ACCENT[s.series]);
+      h.innerHTML = '';
+      const info = el('div', 'info');
+      const k = el('div', 'kicker');
+      k.append(el('span', 'sbadge', s.series), el('span', 'state'));
+      info.append(k, el('div', 'event', s.event), el('div', 'what', s.session),
+        el('div', 'when', dayLabel(s.start) + (s.timeKnown ? ' at ' + time(s.start) : ', Time TBC') + '  ·  ' + s.place));
+      h.append(info, el('div', 'count'));
+    }
+    const live = isLive(s, now);
+    const st = h.querySelector('.state');
+    st.className = 'state' + (live ? ' live' : '');
+    st.textContent = live ? 'Live Now' : 'Next Session';
+    const c = h.querySelector('.count');
+    if (live) {
+      c.innerHTML = '';
+      const left = Math.max(0, Math.round((s.end - now) / 60e3));
+      const box = el('div');
+      box.append(el('b', 'big', left >= 60 ? Math.floor(left / 60) + 'h ' + (left % 60) + 'm' : left + ' Min'), el('small', null, 'Left (Estimated)'));
+      c.appendChild(box);
+      return;
+    }
+    let ms = Math.max(0, s.start - now);
+    if (!s.timeKnown) {
+      const days = Math.max(0, Math.ceil((new Date(s.start.getFullYear(), s.start.getMonth(), s.start.getDate()) - new Date(now.getFullYear(), now.getMonth(), now.getDate())) / 864e5));
+      c.innerHTML = '';
+      const box = el('div');
+      box.append(el('b', 'big', days === 0 ? 'Today' : days === 1 ? 'Tomorrow' : 'In ' + days + ' Days'), el('small', null, 'Time TBC'));
+      c.appendChild(box);
+      return;
+    }
+    const parts = [['Days', 864e5], ['Hrs', 36e5], ['Min', 6e4], ['Sec', 1e3]].map(([label, unit]) => {
+      const v = Math.floor(ms / unit); ms -= v * unit; return [label, v];
+    });
+    if (c.children.length !== 4) {
+      c.innerHTML = '';
+      parts.forEach(([label]) => { const d = el('div'); d.append(el('b'), el('small', null, label)); c.appendChild(d); });
+    }
+    parts.forEach(([, v], i) => { c.children[i].firstChild.textContent = i ? String(v).padStart(2, '0') : v; });
+  }
+
+  /* ---------- list of upcoming sessions, grouped by day ---------- */
+  function render() {
+    const now = new Date();
+    shown = all.filter(s => (filter === 'All' || s.series === filter) && s.end > now).slice(0, MAX_ROWS);
+    // A live session leads; otherwise the next one to start.
+    shown.sort((a, b) => (isLive(b, now) - isLive(a, now)) || (a.start - b.start));
+    $('hero')._id = null;
+    drawHero(now);
+
+    const list = $('list');
+    const keep = focusId || (rows[focused] && rows[focused]._id);
+    list.innerHTML = '';
+    rows = [];
+    let lastDay = null;
+    shown.forEach(s => {
+      const day = dayLabel(s.start);
+      if (day !== lastDay) { list.appendChild(el('div', 'group', day)); lastDay = day; }
+      const r = el('div', 'srow race' + (s.session === 'Race' ? ' main' : '') + (isLive(s, now) ? ' is-live' : ''));
+      r._id = s.id;
+      r.style.setProperty('--accent', ACCENT[s.series]);
+      const txt = el('div', 'txt');
+      txt.append(el('div', 'name', s.session), el('div', 'hint', s.event + '  ·  ' + s.place));
+      const w = el('div', 'when');
+      w.append(el('b', null, isLive(s, now) ? 'Live' : s.timeKnown ? time(s.start) : 'TBC'), el('span', null, shortDay(s.start)));
+      r.append(el('span', 'sbadge', s.series), txt, w);
+      const i = rows.length;
+      // mousemove, not mouseenter: scrolling moves rows under a resting pointer, which must not steal the focus.
+      r.addEventListener('mousemove', () => { if (focused !== i) focus(i, false); });
+      list.appendChild(r);
+      rows.push(r);
+    });
+    if (!rows.length) list.appendChild(el('div', 'empty-note', filter === 'All' ? 'Nothing Scheduled Yet' : 'No ' + filter + ' Sessions Scheduled Yet'));
+    const idx = rows.findIndex(r => r._id === keep);
+    focused = -1;
+    if (rows.length) focus(idx >= 0 ? idx : 0, false);
+    list.scrollTop = idx > 0 ? list.scrollTop : 0;
+  }
+
+  function focus(i, scroll) {
+    if (rows[focused]) rows[focused].classList.remove('focus');
+    focused = i;
+    const r = rows[focused];
+    if (!r) return;
+    r.classList.add('focus');
+    focusId = r._id;
+    if (scroll !== false) {
+      // scroll-padding on the list keeps the row clear of the faded edges and its day heading in view.
+      if (focused === 0) $('list').scrollTo({ top: 0 });
+      else r.scrollIntoView({ block: 'nearest', behavior: document.body.classList.contains('lite') ? 'auto' : 'smooth' });
+    }
+  }
+
+  function drawState() {
+    const p = $('f1state');
+    const f = f1info || {};
+    const at = f.fetched ? (dayKey(f.fetched) === dayKey(new Date()) ? time(f.fetched) : shortDay(f.fetched)) : '';
+    p.textContent = f.state === 'none' ? 'F1: No Internet'
+                  : f.state === 'offline' ? 'Offline: Saved ' + at
+                  : f.fetched ? 'Updated ' + at : 'Loading…';
+  }
+
+  /* ---------- start ---------- */
+  await TV.ui.startPage(action => {
+    if (action === 'up') { if (focused > 0) focus(focused - 1); return true; }
+    if (action === 'down') { if (focused < rows.length - 1) focus(focused + 1); return true; }
+    if (action === 'left' || action === 'right') {
+      const i = FILTERS.indexOf(filter) + (action === 'left' ? -1 : 1);
+      if (i >= 0 && i < FILTERS.length) setFilter(FILTERS[i]);
+      return true;
+    }
+    return action === 'ok' || action === 'lite';
+  });
+  $('sub').textContent = 'Formula 1 and World Endurance  ·  All Times in ' + tzName;
+  drawFilter();
+
+  const onData = d => { all = d.sessions; f1info = d.f1; drawState(); render(); };
+  TV.races.load(onData);
+  window.racesPage = { reload: opts => TV.races.load(onData, opts) };   // for testing from the dev tools
+
+  // Countdown every second; re-list every minute (sessions finish, "Today" rolls over); refresh F1 every 6 hours.
+  setInterval(() => drawHero(new Date()), 1000);
+  setInterval(() => { render(); drawState(); }, 60e3);
+  setInterval(() => TV.races.load(onData), 6 * 3600e3);
+})();
+</script>
+</body>
+</html>

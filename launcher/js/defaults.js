@@ -111,5 +111,36 @@ window.TV_DEFAULTS = {
     "screenOffMinutes":  0,
     "desktopPin":  null,
     "helperPort":  8765
+},
+  "wec-schedule": {
+  "version": 1,
+  "_notes": [
+    "Hand-maintained WEC calendar for the Race Calendar page (WEC has no free official API).",
+    "Each session has either 'start' (UTC, e.g. 2027-03-27T11:00:00Z) or only 'date' (YYYY-MM-DD) while the time is not announced; the page then shows 'Time TBC'.",
+    "Add practice and qualifying sessions with their UTC start times once fiawec.com publishes each event's timetable.",
+    "Source for 2027: FIA WEC calendar announcement of 12 June 2026 (fiawec.com news 13598). Race-day dates as listed there.",
+    "icalUrl: reserved for subscribing to an iCal feed later (not used yet)."
+  ],
+  "icalUrl": null,
+  "events": [
+    { "season": 2027, "round": 1, "name": "Qatar 1812km", "circuit": "Lusail International Circuit", "country": "Qatar",
+      "sessions": [ { "name": "Race", "date": "2027-03-27" } ] },
+    { "season": 2027, "round": 2, "name": "6 Hours of Imola", "circuit": "Imola", "country": "Italy",
+      "sessions": [ { "name": "Race", "date": "2027-04-11" } ] },
+    { "season": 2027, "round": 3, "name": "6 Hours of Silverstone", "circuit": "Silverstone", "country": "United Kingdom",
+      "sessions": [ { "name": "Race", "date": "2027-04-25" } ] },
+    { "season": 2027, "round": 4, "name": "6 Hours of Spa-Francorchamps", "circuit": "Spa-Francorchamps", "country": "Belgium",
+      "sessions": [ { "name": "Race", "date": "2027-05-15" } ] },
+    { "season": 2027, "round": 5, "name": "24 Hours of Le Mans", "circuit": "Circuit de la Sarthe", "country": "France",
+      "sessions": [ { "name": "Race", "date": "2027-06-12" } ] },
+    { "season": 2027, "round": 6, "name": "6 Hours of São Paulo", "circuit": "Interlagos", "country": "Brazil",
+      "sessions": [ { "name": "Race", "date": "2027-07-11" } ] },
+    { "season": 2027, "round": 7, "name": "Lone Star Le Mans", "circuit": "Circuit of the Americas", "country": "USA",
+      "sessions": [ { "name": "Race", "date": "2027-09-12" } ] },
+    { "season": 2027, "round": 8, "name": "6 Hours of Fuji", "circuit": "Fuji Speedway", "country": "Japan",
+      "sessions": [ { "name": "Race", "date": "2027-09-26" } ] },
+    { "season": 2027, "round": 9, "name": "8 Hours of Bahrain", "circuit": "Bahrain International Circuit", "country": "Bahrain",
+      "sessions": [ { "name": "Race", "date": "2027-11-06" } ] }
+  ]
 }
 };

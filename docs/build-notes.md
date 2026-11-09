@@ -2,6 +2,45 @@
 
 Findings made while building, which later stages depend on. Newest first.
 
+## Stage 4 (Race Calendar), tested on the dev PC on 9 November 2026
+
+### How it works
+- `launcher/js/races.js` builds one time-sorted list of sessions from two sources:
+  - **F1:** `https://api.jolpi.ca/ergast/f1/<year>.json` for this year and next (next is empty until published).
+    The API allows cross-origin requests (`Access-Control-Allow-Origin: *`), so the page calls it directly; no
+    helper needed. Sessions: Practice 1–3, Sprint Qualifying (or the older Sprint Shootout), Sprint, Qualifying,
+    Race. A session without a time shows "Time TBC".
+  - **WEC:** `config/wec-schedule.json`, hand-maintained. Each session has `start` (UTC) or only `date` while the
+    time is unannounced. `icalUrl` is reserved for an iCal feed later.
+- **Offline:** the F1 download is saved in localStorage and through the helper in
+  `%LOCALAPPDATA%\TVLauncher\cache\f1-calendar.json` (new `GET/POST /cache/{name}`). The page shows the saved copy
+  at once and downloads again when it is over 6 hours old. The pill says "Updated 20:03", "Offline: Saved …"
+  or "F1: No Internet" (no saved copy yet; WEC still shows).
+- Times are in the PC's own time zone, named in the subtitle ("All Times in SAST" on this PC).
+- "Live Now" uses an estimated length: 60 min practice/qualifying, 45 min sprint events, 2 h F1 race, and the
+  hours in a WEC race's name (6/8/24; Qatar 1812km = 10 h).
+- Keys: Up/Down scroll the sessions, Left/Right switch All / F1 / WEC (remembered), Back goes home.
+
+### WEC data
+- The 2026 WEC season ended with Bahrain on 7 November 2026, so the file holds the **2027** calendar from the FIA
+  announcement of 12 June 2026: 9 rounds, race-day dates only. Add practice/qualifying and real start times
+  from each event's timetable on fiawec.com when they are published (usually a few weeks before each event).
+
+### What was tested (preview browser at 1920×1080, then with the helper running in test mode)
+- 24 upcoming sessions (Las Vegas, Qatar and Abu Dhabi F1 plus 9 WEC races); countdown ticks every second.
+- Filter All / F1 / WEC; scrolling to the end and back; the focused row stays clear of the faded edges.
+- A pretend live WEC race (injected) shows "Live Now" with the time left.
+- No internet with a saved copy → "Offline: Saved"; no internet and no copy → WEC only, "F1: No Internet".
+- With the helper: config and the F1 copy come from the helper; with localStorage cleared and no internet the
+  helper's copy fills the page.
+- Home tile → Race Calendar → Back returns with the Race Calendar tile focused. Lite mode drops the blur.
+- Rows used `mouseenter` at first; scrolling moved rows under a resting pointer and stole the focus, so rows use
+  `mousemove` (matters for the air mouse).
+
+### For the TV PC
+- When the helper is down, Windows takes about 2 s to refuse each localhost connection, so pages load slower in
+  that state only.
+
 ## Stage 3 (Settings and Power), tested on the dev PC on 9 November 2026
 
 ### Test mode
