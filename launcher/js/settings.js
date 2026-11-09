@@ -273,6 +273,8 @@
         const ok = await TV.ui.confirm({ title: 'Restart the Launcher?', buttons: [{ label: 'Cancel', value: false }, { label: 'Restart', value: true }] });
         if (ok) H.request('/restart-launcher', { method: 'POST' }).catch(() => {});
       } });
+    goRow({ name: 'Remote Button Test', hint: 'Shows What Each Button Sends (Hold Back to Leave)', accent: '#8a8fb3',
+      ok: () => { location.href = new URL('keytest.html', location.href).href; } });
     goRow({ name: 'Windows Desktop', hint: 'For Maintenance', accent: '#8a8fb3', ok: openDesktop });
     pinItem = row({ name: 'Desktop PIN', hint: 'Asked Before Opening the Windows Desktop', accent: '#8a8fb3', ok: changePin });
     drawPin(!!s.desktopPin);

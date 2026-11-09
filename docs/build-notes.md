@@ -2,6 +2,50 @@
 
 Findings made while building, which later stages depend on. Newest first.
 
+## Stage 5 (setup, uninstall, README), previewed on the dev PC on 9 November 2026
+
+### Scripts
+- `scripts/setup.ps1`, `scripts/uninstall.ps1`, shared code in `scripts/setup-lib.ps1`. **Preview by default:** every
+  change is listed with the setting's current value (`[ok]` / `[would]` / `[check]`) and nothing is changed.
+  `-Apply` needs an admin window and the typed word `SETUP` (or `-Yes`). `-TVUser` picks the account (default:
+  the one running it); `-Skip a,b` leaves steps out.
+- The TV user's own registry is written through `HKEY_USERS\<SID>`, or their `NTUSER.DAT` is loaded when they are
+  not signed in, so setup also works from a separate admin account.
+- **Shell:** `HKCU\...\Winlogon\Shell = wscript.exe "<install>\scripts\start.vbs"` for the TV user only.
+- **Auto-login:** local accounts only. The password is checked against Windows first, then stored as the LSA
+  secret `DefaultPassword` (what Sysinternals Autologon does), never as plain text in the registry.
+  `DevicePasswordLessBuildVersion = 0` so Windows Hello does not block it. A Microsoft account gets a `[check]`
+  pointing to the README (use a local account `TV`).
+- **Windows Update:** policy active hours 08:00–02:00 (the 18-hour maximum) and `NoAutoRebootWithLoggedOnUsers`.
+- **Power:** High performance (re-added if Windows hid it), no sleep/hibernate/screen/disk timeouts, USB selective
+  suspend off, no password on wake (`CONSOLELOCK 0`), hibernation off.
+- **Debloat:** exact package names only (plus `king.com.*`); the TV apps, Store, Edge, App Installer, frameworks,
+  Calculator and Photos are never on the list. Also turns off tips/ads/suggestions, search highlights, toasts and
+  background apps. With a custom shell, `Run` keys (OneDrive, etc.) do not start at all: explorer runs those.
+- **Edge policies** for the TV user: the six from stage 2 plus no default-browser nag, recommendations,
+  promotional tabs or sidebar.
+- **Uninstall** removes the shell value, auto-login and stored password, and our Edge policies; stops the
+  launcher (start.ps1 first, then the helper, so nothing restarts). `-RemoveData` also deletes
+  `%LOCALAPPDATA%\TVLauncher`. Debloat, power and update settings are left (listed in the script header).
+- `scripts/extract-icons.ps1` (setup step 10, also usable alone): Store apps use the largest `Square44x44Logo`
+  (tight icon, prefers `altform-unplated`), falling back to `Square150x150Logo`; websites use their own manifest or
+  `<link rel=icon>` icons, skipping `monochrome` ones and preferring non-maskable; the Browser tile uses Edge's
+  `VisualElements\Logo.png`, cropped to the visible logo. Icons are `.gitignore`d (extracted on each machine).
+- Settings > System > **Remote Button Test** opens the key-test page (there was no way to reach it with the remote).
+
+### Tested on the dev PC
+- Previews of setup (71 changes listed) and uninstall; nothing changed. `-Apply` without admin refuses; unknown
+  user gives a clear message.
+- **Bug found:** the shared file's `$Script:Apply` overwrote the `-Apply` switch (same scope after dot-sourcing),
+  so `-Apply` silently ran as a preview. Renamed to `$Script:ApplyChanges`; now refuses without admin as intended.
+- Apply-mode helpers (set, already-right, remove, one change per loop item) tested on a scratch HKCU key, then
+  deleted.
+- extract-icons ran for real: all 7 icons copied; the home screen shows them.
+
+### Not tested (needs the TV PC, as admin)
+- A real `-Apply`: the LSA password, loading another user's hive, app removal, powercfg, winget install of
+  AutoHotkey, and the custom shell actually starting at sign-in. Run the preview first, then `-Apply`, on the TV PC.
+
 ## Stage 4 (Race Calendar), tested on the dev PC on 9 November 2026
 
 ### How it works

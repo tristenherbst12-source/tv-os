@@ -47,6 +47,7 @@ window.TV_DEFAULTS = {
     },
     "browser": {
       "name": "Browser", "accent": "#14c3b4", "glyph": "globe",
+      "icon": "icons/browser.png", "iconBg": "transparent",
       "launch": { "type": "edge", "url": "https://www.google.com", "profile": "browser" },
       "onHome": "close"
     },
