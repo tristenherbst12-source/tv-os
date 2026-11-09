@@ -35,8 +35,7 @@ robocopy C:\Users\trist\OneDrive\Dokumente\appdev\tv-os E:\TVLauncher /E /XD .gi
 
 ## Apps
 - [ ] Each tile opens, plays in 1080p, and Home closes it (Spotify: minimises and keeps playing).
-- [ ] YouTube: plays smoothly (H.264 forced). Check `chrome://media-internals`-style stutter by eye; note any
-      "developer mode extensions" pop-up.
+- [ ] YouTube: 1080p plays without stuttering (H.264 is forced). Note any "developer mode extensions" pop-up.
 - [ ] Netflix / Prime / Disney+ still sign in fine with the Edge settings from setup.
 - [ ] YouTube and F1TV keep their logins after a restart.
 
