@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Home</title>
+<link rel="preload" href="fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="css/launcher.css">
+</head>
+<body>
+<div class="wall"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div></div>
+<div class="vignette"></div>
+
+<main class="screen">
+  <header class="top">
+    <div>
+      <div class="greet" id="greet">Good Evening, Jazz &amp; Tris</div>
+      <div class="clock" id="clock">--:--</div>
+      <div class="date" id="date"></div>
+    </div>
+    <div class="status">
+      <div class="pill">
+        <svg id="modeIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/></svg>
+        <span id="modeTxt">Night</span>
+      </div>
+      <div class="pill">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5a10 10 0 0 1 14 0"/><path d="M8.5 16a5 5 0 0 1 7 0"/><path d="M2 9a15 15 0 0 1 20 0"/><circle cx="12" cy="19.5" r=".6" fill="currentColor"/></svg>
+        <span id="net">Online</span>
+      </div>
+    </div>
+  </header>
+
+  <section class="rows" id="rows"></section>
+
+  <div class="hints">
+    <span><span class="key">◀ ▶ ▲ ▼</span>Move</span>
+    <span><span class="key">OK</span>Open</span>
+    <span><span class="key">Back</span>Home</span>
+    <span><span class="key">L</span>Lite Mode</span>
+  </div>
+</main>
+
+<div class="launch" id="launch"><div class="box"><div class="icon" id="lIcon"></div><div class="txt" id="lTxt"></div><div class="msg" id="lMsg"></div><div class="spin"></div></div></div>
+
+<!-- Written at install time (port + token). Missing in a plain browser, which is fine. -->
+<script src="js/helper-token.js"></script>
+<script src="js/defaults.js"></script>
+<script src="js/glyphs.js"></script>
+<script src="js/themes.js"></script>
+<script src="js/config.js"></script>
+<script src="js/keys.js"></script>
+<script src="js/home.js"></script>
+</body>
+</html>

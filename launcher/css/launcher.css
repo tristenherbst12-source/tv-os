@@ -1,0 +1,118 @@
+/* TV Launcher: home screen styles.
+   Visuals are the approved design (design/index-blue.html). Change with care. */
+
+@font-face{font-family:'InterV';src:url(../fonts/InterVariable.woff2) format('woff2');font-weight:100 900;font-display:block}
+
+:root{
+  --bg:#08111f;--b1:#1f4d8f;--b2:#163a6e;--b3:#2c62a8;--b4:#0f2a52;
+  --glass:rgba(255,255,255,.07);--glass-hi:rgba(255,255,255,.14);
+  --line:rgba(255,255,255,.14);--text:#f6f7f0;--dim:rgba(246,247,240,.68);
+  --u:min(1vw,1.78vh);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
+  font-family:"InterV","Segoe UI",system-ui,sans-serif;font-optical-sizing:auto;-webkit-font-smoothing:antialiased;letter-spacing:-.011em;cursor:default;user-select:none}
+body{transition:background 4s ease}
+
+/* ---------- dynamic wallpaper ---------- */
+.wall{position:fixed;inset:0;overflow:hidden;z-index:0}
+.blob{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(90px);opacity:.55;
+  transition:background 4s ease;will-change:transform}
+.blob.a{background:var(--b1);top:-20vmax;left:-15vmax;animation:da 38s ease-in-out infinite alternate}
+.blob.b{background:var(--b2);bottom:-25vmax;right:-10vmax;animation:db 44s ease-in-out infinite alternate}
+.blob.c{background:var(--b3);top:20vh;left:35vw;width:40vmax;height:40vmax;opacity:.4;animation:dc 52s ease-in-out infinite alternate}
+.blob.d{background:var(--b4);bottom:-10vmax;left:-10vmax;width:45vmax;height:45vmax;animation:dd 47s ease-in-out infinite alternate}
+@keyframes da{to{transform:translate(18vw,14vh) scale(1.15)}}
+@keyframes db{to{transform:translate(-22vw,-10vh) scale(.9)}}
+@keyframes dc{to{transform:translate(-20vw,18vh) scale(1.25)}}
+@keyframes dd{to{transform:translate(25vw,-20vh) scale(1.1)}}
+.vignette{position:fixed;inset:0;z-index:1;pointer-events:none;
+  background:radial-gradient(ellipse at 50% 40%,transparent 40%,rgba(0,0,0,.55) 100%)}
+
+/* ---------- layout ---------- */
+.screen{position:relative;z-index:2;height:100%;display:flex;flex-direction:column;
+  padding:calc(var(--u)*4) calc(var(--u)*5) calc(var(--u)*3)}
+.top{position:relative;display:flex;flex-direction:column;align-items:center;text-align:center}
+.top .status{position:absolute;top:0;right:0}
+.greet{font-size:calc(var(--u)*2.2);font-weight:600;color:var(--text);letter-spacing:-.02em}
+/* Glass clock. Never use -webkit-text-stroke here: Inter's overlapping contours show lines inside the "1". */
+.clock{font-family:"InterV",sans-serif;font-size:calc(var(--u)*9.5);font-weight:800;line-height:1;letter-spacing:-.05em;font-variant-numeric:tabular-nums;margin-top:calc(var(--u)*.3);color:transparent;background:linear-gradient(170deg,rgba(255,255,255,.78) 0%,rgba(255,255,255,.34) 42%,rgba(255,255,255,.16) 68%,rgba(255,255,255,.42) 100%);-webkit-background-clip:text;background-clip:text;filter:drop-shadow(0 0 1px rgba(255,255,255,.75)) drop-shadow(0 -1px 0 rgba(255,255,255,.35)) drop-shadow(0 calc(var(--u)*.8) calc(var(--u)*2.5) rgba(0,0,0,.3))}
+.date{font-size:calc(var(--u)*1.75);color:#fff;margin-top:calc(var(--u)*.6)}
+.status{display:flex;gap:calc(var(--u)*1);align-items:center}
+.pill{display:flex;align-items:center;gap:calc(var(--u)*.6);padding:calc(var(--u)*.7) calc(var(--u)*1.3);
+  border-radius:999px;background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);
+  font-size:calc(var(--u)*1.25);color:var(--dim)}
+.pill svg{width:calc(var(--u)*1.5);height:calc(var(--u)*1.5)}
+
+.rows{margin-top:auto}
+.label{font-size:calc(var(--u)*1.5);font-weight:650;color:var(--text);margin:0 0 calc(var(--u)*1.2) calc(var(--u)*.4);letter-spacing:-.02em}
+.row{display:grid;gap:calc(var(--u)*1.6)}
+.row.big{grid-template-columns:repeat(var(--cols,6),1fr)}
+.row.small{grid-template-columns:repeat(var(--cols,4),1fr);margin-top:calc(var(--u)*1.2)}
+.rows .label + .row{margin-top:0}
+.rows .row.big + .label{margin-top:calc(var(--u)*3)}
+
+/* ---------- glass tiles ---------- */
+.tile{position:relative;overflow:hidden;border-radius:calc(var(--u)*1.8);
+  background:var(--glass);border:1px solid var(--line);
+  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);
+  display:flex;flex-direction:column;justify-content:space-between;
+  transition:transform .28s cubic-bezier(.2,.9,.3,1.2),box-shadow .28s ease,border-color .28s ease,background .28s ease;
+  outline:none}
+.tile::before{content:"";position:absolute;inset:0;z-index:-1;
+  background:radial-gradient(120% 90% at 0% 100%,var(--accent) 0%,transparent 60%);opacity:.35;transition:opacity .28s ease}
+.tile::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
+  background:linear-gradient(160deg,rgba(255,255,255,.18) 0%,transparent 35%)}
+.big .tile{height:calc(var(--u)*14);padding:calc(var(--u)*1.6)}
+.small .tile{flex-direction:row;align-items:center;justify-content:flex-start;gap:calc(var(--u)*1.2);
+  height:calc(var(--u)*4.4);padding:0 calc(var(--u)*1.2);border-radius:calc(var(--u)*1.2)}
+.small .name{font-size:calc(var(--u)*1.2);font-weight:550;color:var(--dim)}
+.small .tile.focus .name{color:var(--text)}
+.label.minor{font-size:calc(var(--u)*1.15);font-weight:500;color:var(--dim)}
+/* A focused big tile grows ~1.2u upward (scale 1.08 + lift), so its label needs more room than the design's 1.2u. */
+.label:not(.minor){margin-bottom:calc(var(--u)*2.2)}
+.row.small{width:72%;margin-left:auto;margin-right:auto}
+.label{text-align:center}
+.icon{width:calc(var(--u)*4);height:calc(var(--u)*4);border-radius:calc(var(--u)*1.1);
+  display:grid;place-items:center;background:var(--accent);box-shadow:0 calc(var(--u)*.6) calc(var(--u)*2) calc(var(--u)*-.4) var(--accent)}
+.small .icon{width:calc(var(--u)*2.4);height:calc(var(--u)*2.4);border-radius:calc(var(--u)*.65)}
+.icon svg{width:55%;height:55%;color:#fff}
+/* Real app icon (from the PC). The plate colour comes from the app's manifest when it has one. */
+.icon.img{background:var(--icon-bg,var(--accent));overflow:hidden}
+.icon.img img{width:100%;height:100%;object-fit:contain;display:block}
+.icon.img.pad img{width:72%;height:72%}
+.name{font-size:calc(var(--u)*1.65);font-weight:650;letter-spacing:-.02em}
+.sub{font-size:calc(var(--u)*1.05);color:var(--dim);margin-top:calc(var(--u)*.3)}
+.tile.focus{transform:scale(1.08) translateY(calc(var(--u)*-.6));background:var(--glass-hi);
+  border-color:rgba(255,255,255,.55);
+  box-shadow:0 calc(var(--u)*2.2) calc(var(--u)*5) calc(var(--u)*-1) var(--accent),0 0 0 calc(var(--u)*.25) rgba(255,255,255,.25)}
+.tile.focus::before{opacity:.9}
+.small .tile.focus{transform:scale(1.05)}
+
+.hints{display:flex;gap:calc(var(--u)*2.4);justify-content:center;margin-top:calc(var(--u)*3);
+  font-size:calc(var(--u)*1.1);color:var(--dim)}
+.key{display:inline-block;padding:calc(var(--u)*.15) calc(var(--u)*.7);border-radius:calc(var(--u)*.5);
+  border:1px solid var(--line);background:var(--glass);margin-right:calc(var(--u)*.5);color:var(--text)}
+
+/* ---------- launch overlay ---------- */
+.launch{position:fixed;inset:0;z-index:10;display:grid;place-items:center;
+  background:rgba(5,5,15,.35);backdrop-filter:blur(30px);-webkit-backdrop-filter:blur(30px);
+  opacity:0;pointer-events:none;transition:opacity .3s ease}
+.launch.show{opacity:1}
+.launch .box{display:flex;flex-direction:column;align-items:center;gap:calc(var(--u)*1.6);
+  transform:scale(.9);transition:transform .35s cubic-bezier(.2,.9,.3,1.2)}
+.launch.show .box{transform:scale(1)}
+.launch .icon{width:calc(var(--u)*9);height:calc(var(--u)*9);border-radius:calc(var(--u)*2.4)}
+.launch .txt{font-size:calc(var(--u)*2);font-weight:600}
+.launch .msg{font-size:calc(var(--u)*1.2);color:var(--dim);min-height:1.2em}
+.launch.error .spin{display:none}
+.spin{width:calc(var(--u)*2.4);height:calc(var(--u)*2.4);border-radius:50%;
+  border:calc(var(--u)*.3) solid rgba(255,255,255,.2);border-top-color:#fff;animation:sp 0.8s linear infinite}
+@keyframes sp{to{transform:rotate(360deg)}}
+
+/* ---------- lite mode (for weak GPUs) ---------- */
+body.lite .blob{animation:none}
+body.lite .tile,body.lite .pill,body.lite .launch{backdrop-filter:none;-webkit-backdrop-filter:none}
+body.lite .tile{background:rgba(30,30,50,.72)}
+body.lite .tile.focus{background:rgba(55,55,85,.85)}

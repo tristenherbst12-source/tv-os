@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "launcher": {
+    "up":    ["ArrowUp"],
+    "down":  ["ArrowDown"],
+    "left":  ["ArrowLeft"],
+    "right": ["ArrowRight"],
+    "ok":    ["Enter", "NumpadEnter", " "],
+    "back":  ["Escape", "Backspace", "BrowserBack"],
+    "home":  ["BrowserHome"],
+    "lite":  ["l", "L"]
+  },
+  "global": {
+    "home":        ["Browser_Home"],
+    "back":        ["Browser_Back"],
+    "escapeHatch": ["^!+d"]
+  },
+  "_notes": [
+    "launcher: browser KeyboardEvent values. Each entry matches either e.key or e.code (e.g. 'Enter' or 'NumpadEnter').",
+    "global: AutoHotkey v2 key names, used by hotkeys/tv.ahk (stage 2) while another app is in front.",
+    "The remote model is not final. Open launcher/pages/keytest.html, press every button, and copy the values in here."
+  ]
+}

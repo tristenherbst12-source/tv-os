@@ -1,0 +1,151 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Remote Key Test</title>
+<link rel="stylesheet" href="../css/launcher.css">
+<style>
+  .screen{gap:calc(var(--u)*2)}
+  h1{font-size:calc(var(--u)*2.6);font-weight:700;letter-spacing:-.02em;text-align:center}
+  .intro{font-size:calc(var(--u)*1.2);color:var(--dim);text-align:center;margin-top:calc(var(--u)*.6)}
+  .panel{flex:1;min-height:0;border-radius:calc(var(--u)*1.8);background:var(--glass);border:1px solid var(--line);
+    backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);
+    padding:calc(var(--u)*1.4) calc(var(--u)*2);overflow:hidden;display:flex;flex-direction:column}
+  body.lite .panel{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(30,30,50,.72)}
+  table{width:100%;border-collapse:collapse;font-size:calc(var(--u)*1.2);font-variant-numeric:tabular-nums}
+  th{text-align:left;font-weight:600;color:var(--dim);padding:calc(var(--u)*.5) calc(var(--u)*.8);border-bottom:1px solid var(--line)}
+  td{padding:calc(var(--u)*.45) calc(var(--u)*.8);border-bottom:1px solid rgba(255,255,255,.06);white-space:nowrap}
+  tr.new td{animation:hl 1.2s ease}
+  @keyframes hl{from{background:rgba(255,255,255,.18)}to{background:transparent}}
+  .mono{font-family:Consolas,"Cascadia Mono",monospace;font-size:.95em}
+  .act{color:#7fe3a4}.none{color:rgba(255,255,255,.35)}
+  .bar{display:flex;gap:calc(var(--u)*1.2);justify-content:center;align-items:center}
+  .btn{font:inherit;font-size:calc(var(--u)*1.2);color:var(--text);padding:calc(var(--u)*.7) calc(var(--u)*1.6);
+    border-radius:999px;background:var(--glass);border:1px solid var(--line);cursor:pointer}
+  .btn:hover{background:var(--glass-hi);border-color:rgba(255,255,255,.55)}
+  .seen{font-size:calc(var(--u)*1.1);color:var(--dim);text-align:center;min-height:1.4em}
+</style>
+</head>
+<body>
+<div class="wall"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div></div>
+<div class="vignette"></div>
+
+<main class="screen">
+  <header>
+    <h1>Remote Key Test</h1>
+    <p class="intro">Press every button on the remote, one at a time. Each press shows up below. Copy the Key or Code values into config/keymap.json.</p>
+  </header>
+
+  <div class="panel">
+    <table>
+      <thead><tr><th>Time</th><th>Event</th><th>Key</th><th>Code</th><th>keyCode</th><th>Modifiers</th><th>Launcher Action</th><th>AutoHotkey</th></tr></thead>
+      <tbody id="log"></tbody>
+    </table>
+  </div>
+
+  <div class="seen" id="seen"></div>
+  <div class="bar">
+    <button class="btn" id="copy">Copy Log</button>
+    <button class="btn" id="clear">Clear</button>
+    <button class="btn" id="home">Back to Home</button>
+  </div>
+  <p class="intro">To leave without a mouse: hold Escape (or the remote's Back) for 2 seconds.</p>
+</main>
+
+<script src="../js/helper-token.js"></script>
+<script src="../js/defaults.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/keys.js"></script>
+<script>
+(async function () {
+  const log = document.getElementById('log');
+  const rows = [];
+  const seen = new Set();
+  const MAX = 14;
+
+  const cfg = await TV.config.loadAll();
+  TV.keys.load(cfg.keymap);
+  document.body.classList.toggle('lite', !!cfg.settings.lite);
+
+  function mods(e) {
+    return ['ctrlKey:Ctrl', 'altKey:Alt', 'shiftKey:Shift', 'metaKey:Win']
+      .filter(p => e[p.split(':')[0]]).map(p => p.split(':')[1]).join('+');
+  }
+
+  function add(r) {
+    rows.unshift(r);
+    const tr = document.createElement('tr');
+    tr.className = 'new';
+    const cells = [r.time, r.event, r.key, r.code, r.keyCode, r.mods, r.action, r.ahk];
+    cells.forEach((v, i) => {
+      const td = document.createElement('td');
+      td.textContent = v === '' || v == null ? '—' : v;
+      if (i >= 2 && i <= 4) td.className = 'mono';
+      if (i === 6) td.className = v ? 'act' : 'none';
+      if (i === 7 && !v) td.className = 'none';
+      tr.appendChild(td);
+    });
+    log.prepend(tr);
+    while (log.children.length > MAX) log.lastChild.remove();
+    if (r.key) seen.add(r.key);
+    document.getElementById('seen').textContent = seen.size ? 'Seen so far: ' + [...seen].join('  ·  ') : '';
+  }
+
+  const now = () => new Date().toLocaleTimeString('en-GB');
+  // Catch everything, including keys the browser would act on (Back, Home, F5, Tab, context menu).
+  let escDown = 0;
+  window.addEventListener('keydown', e => {
+    e.preventDefault();
+    if (e.repeat) {
+      if ((e.key === 'Escape' || e.key === 'BrowserBack') && escDown && Date.now() - escDown > 2000) location.href = '../index.html';
+      return;
+    }
+    if (e.key === 'Escape' || e.key === 'BrowserBack') escDown = Date.now();
+    add({ time: now(), event: 'keydown', key: e.key === ' ' ? 'Space (" ")' : e.key, code: e.code, keyCode: e.keyCode,
+          mods: mods(e), action: TV.keys.action(e) || '', ahk: '' });
+  }, true);
+  window.addEventListener('keyup', e => {
+    e.preventDefault();
+    if (e.key === 'Escape' || e.key === 'BrowserBack') escDown = 0;
+  }, true);
+
+  // Air mice often send mouse buttons (e.g. Back as button 3) or the context-menu key.
+  const BTN = ['Left', 'Middle', 'Right', 'Back (X1)', 'Forward (X2)'];
+  window.addEventListener('mousedown', e => {
+    if (e.target.closest('.btn')) return;
+    e.preventDefault();
+    add({ time: now(), event: 'mouse', key: BTN[e.button] || 'Button ' + e.button, code: '', keyCode: e.button, mods: mods(e), action: '', ahk: '' });
+  }, true);
+  window.addEventListener('contextmenu', e => e.preventDefault(), true);
+  window.addEventListener('wheel', e => {
+    add({ time: now(), event: 'wheel', key: e.deltaY < 0 ? 'Wheel Up' : 'Wheel Down', code: '', keyCode: Math.round(e.deltaY), mods: mods(e), action: '', ahk: '' });
+  }, { passive: true });
+
+  // Keys AutoHotkey sees (including ones that never reach the browser, like Volume or the Home button)
+  // are streamed by the helper from stage 2 onward. Until then this column stays empty.
+  if (TV.helper.available) {
+    let since = 0;
+    setInterval(async () => {
+      try {
+        const r = await TV.helper.request('/keys?since=' + since, { timeout: 900 });
+        (r.events || []).forEach(k => {
+          since = Math.max(since, k.id);
+          add({ time: now(), event: 'ahk', key: '', code: '', keyCode: k.vk || '', mods: '', action: '', ahk: k.name + (k.sc ? ' (sc' + k.sc + ')' : '') });
+        });
+      } catch (e) { /* helper not ready yet */ }
+    }, 1000);
+  }
+
+  document.getElementById('clear').onclick = () => { rows.length = 0; seen.clear(); log.innerHTML = ''; document.getElementById('seen').textContent = ''; };
+  document.getElementById('home').onclick = () => { location.href = '../index.html'; };
+  document.getElementById('copy').onclick = async () => {
+    const text = rows.slice().reverse().map(r => [r.time, r.event, r.key, r.code, r.keyCode, r.mods, r.action, r.ahk].join('\t')).join('\n');
+    try { await navigator.clipboard.writeText(text); document.getElementById('copy').textContent = 'Copied'; }
+    catch (e) { console.log(text); document.getElementById('copy').textContent = 'See Console'; }
+    setTimeout(() => { document.getElementById('copy').textContent = 'Copy Log'; }, 1500);
+  };
+})();
+</script>
+</body>
+</html>
