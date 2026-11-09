@@ -5,10 +5,9 @@
 
   /* Pages that are not built yet. Remove an entry when its stage lands. */
   const NOT_YET = {
-    races:    'Arrives in Stage 4',
-    settings: 'Arrives in Stage 3',
-    power:    'Arrives in Stage 3'
+    races:    'Arrives in Stage 4'
   };
+  const FOCUS_KEY = 'tv.home.focus';   // tile to focus when coming back (e.g. from Settings)
 
   let cfg, grid = [], rows = [], fr = 0, fc = 0, busy = false;
 
@@ -89,7 +88,14 @@
       rows.push(apps);
     });
     fr = 0; fc = 0;
-    if (grid.length) setFocus(0, 0);
+    if (!grid.length) return;
+    let last = null;
+    try { last = sessionStorage.getItem(FOCUS_KEY); } catch (e) { /* storage blocked */ }
+    for (let r = 0; r < rows.length; r++) {
+      const c = rows[r].findIndex(a => a.id === last);
+      if (c >= 0) { setFocus(r, c); return; }
+    }
+    setFocus(0, 0);
   }
 
   function setFocus(r, c) {
@@ -118,6 +124,7 @@
   async function launch(a) {
     if (busy) return;
     busy = true;
+    try { sessionStorage.setItem(FOCUS_KEY, a.id); } catch (e) { /* storage blocked */ }
     const type = a.launch && a.launch.type;
 
     if (type === 'page') {
@@ -175,8 +182,7 @@
     if (save) TV.config.saveSettings({ lite: !!on });
   }
 
-  /* ---------- clock + time-of-day wallpaper ---------- */
-  let lastKey = '';
+  /* ---------- clock (the wallpaper itself is js/wallpaper.js) ---------- */
   function tick() {
     const d = new Date();
     $('clock').textContent = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
@@ -184,17 +190,19 @@
     const part = TV.dayPart(d);
     $('greet').textContent =
       (part === 'morning' ? 'Good Morning' : part === 'day' ? 'Good Afternoon' : 'Good Evening') + ', Jazz & Tris';
-    const theme = TV.themeFor(cfg.settings.wallpaper, d);
-    const key = theme + '/' + part;
-    if (key !== lastKey) {
-      lastKey = key;
-      const p = TV.THEMES[theme][part], s = document.documentElement.style;
-      s.setProperty('--bg', p.bg);
-      ['--b1', '--b2', '--b3', '--b4'].forEach((v, i) => s.setProperty(v, p.b[i]));
-      $('modeTxt').textContent = p.name;
-      $('modeIcon').innerHTML = TV.GLYPHS[part === 'morning' || part === 'day' ? 'sun' : 'moon'];
-    }
     $('net').textContent = navigator.onLine ? 'Online' : 'Offline';
+  }
+
+  /* ---------- screen off when idle (Settings > Screen Off When Idle; home screen only) ---------- */
+  let lastInput = Date.now(), screenOffSent = false;
+  function noteInput() { lastInput = Date.now(); screenOffSent = false; }
+  function checkIdle() {
+    const mins = Number(cfg.settings.screenOffMinutes) || 0;
+    if (!mins || screenOffSent || !TV.helper.available) return;
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) { lastInput = Date.now(); return; }   // an app is in front
+    if (Date.now() - lastInput < mins * 60000) return;
+    screenOffSent = true;
+    TV.helper.request('/screen-off', { method: 'POST' }).catch(() => { screenOffSent = false; });
   }
 
   /* ---------- start ---------- */
@@ -203,8 +211,15 @@
     console.info('[launcher] config sources', TV.config.sources);
     TV.keys.load(cfg.keymap);
     setLite(cfg.settings.lite, false);
+    TV.wallpaper.start(cfg.settings, (part, p) => {
+      $('modeTxt').textContent = p.name;
+      $('modeIcon').innerHTML = TV.GLYPHS[part === 'morning' || part === 'day' ? 'sun' : 'moon'];
+    });
     tick();
     setInterval(tick, 1000);
+    ['keydown', 'mousemove', 'mousedown', 'wheel'].forEach(t => window.addEventListener(t, noteInput, { passive: true }));
+    window.addEventListener('focus', noteInput);
+    setInterval(checkIdle, 10000);
     await resolveIcons(cfg.apps.apps || {});
     build();
     document.addEventListener('keydown', onKey);

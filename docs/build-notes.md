@@ -2,6 +2,42 @@
 
 Findings made while building, which later stages depend on. Newest first.
 
+## Stage 3 (Settings and Power), tested on the dev PC on 9 November 2026
+
+### Test mode
+`start.ps1 -Windowed` (or `-TestMode` on its own) starts the helper with `-TestMode`. Sleep, Restart, Shut Down, the
+sleep timer and screen-off are then only written to `logs\helper.log`, and the pages show "Test Mode". On the TV PC
+start it without these switches.
+
+### What was tested (preview browser plus the full system, test mode)
+- **Volume:** Left/Right in steps of 5, OK mutes; changing the volume unmutes, like a TV. It uses the real Windows
+  volume (Core Audio); restored afterwards.
+- **Sound output:** lists active playback devices; OK makes one the default for all roles (via the undocumented but
+  long-stable `IPolicyConfig` interface that audio-switcher tools use). Switched away from and back to the default
+  device.
+- **Sleep timer:** Off / 30 / 60 / 90 min, Sleep or Shut Down. Stored in `%LOCALAPPDATA%\TVLauncher\sleep-timer.json`,
+  so a helper restart does not lose it; cleared before it acts, so waking up does not set it off again. A 1-minute
+  timer went off on time.
+- **Screen off when idle:** home screen only, and only while the launcher is in front. Tested with a 3-second
+  setting. On the TV the off message is `SC_MONITORPOWER`; check that the TV goes to standby and that the remote
+  wakes it.
+- **Wallpaper, Lite mode:** saved through the helper and applied straight away.
+- **Wi-Fi and Bluetooth:** status in the row, and OK opens the Windows Settings page. Home closes Windows Settings
+  (`winsettings` hidden entry in apps.json).
+- **Desktop PIN:** 4 digits, stored salted and SHA-256 hashed in settings.json, and cannot be changed through
+  `POST /settings`. Set, wrong PIN, right PIN and remove all tested. A remote's number keys or the on-screen keypad
+  both work.
+- **Power page:** Sleep / Restart / Shut Down, with Cancel focused first in the confirmation.
+- Coming back from Settings or Power puts focus on the tile you came from.
+- `scripts/test-apps.ps1`: all 7 apps still pass.
+
+### For the TV PC
+- `GET /status` takes about 3 s (netsh plus the network adapters), so the Settings page fills those rows in after
+  it opens.
+- Bluetooth status only says whether there is a radio. The dev PC has none, so "pair" could not be tested here.
+- Sleep uses `SetSuspendState`. If hibernation is on, Windows may use hybrid sleep; `setup.ps1` could turn
+  hibernation off (`powercfg /h off`).
+
 ## Stage 2 (helper and launching), tested on the dev PC on 9 November 2026
 
 ### How the pieces fit

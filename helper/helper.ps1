@@ -1,10 +1,12 @@
 # TV Launcher helper: a small local web service the launcher page talks to.
 # Listens on 127.0.0.1 only and rejects any request without the secret token.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File helper\helper.ps1 [-ManageLauncher] [-Windowed]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File helper\helper.ps1 [-ManageLauncher] [-Windowed] [-TestMode]
 #
 #   -ManageLauncher  start the launcher window and restart it if it closes or crashes (used by start.ps1)
 #   -Windowed        launcher in a normal window instead of full-screen kiosk (for testing on a desktop PC)
+#   -TestMode        sleep, restart, shut down, the sleep timer and screen-off only log what they would do
+#                    (start.ps1 -Windowed turns this on, so testing on a desktop PC never powers it off)
 #
 # Endpoints (all need header X-TV-Token):
 #   GET  /ping                      helper is up
@@ -13,12 +15,18 @@
 #   POST /launch/{appId}            open an app from config/apps.json
 #   POST /home                      tv.ahk asks what to do with the window in front (close / minimize)
 #   GET  /keys?since=N, POST /keys  keys seen by tv.ahk, for the key-test page
-#   GET  /status                    uptime, storage, version
+#   GET  /status                    uptime, storage, version, network, bluetooth
+#   GET  /volume, POST /volume      {level, muted}; POST takes level, delta and/or muted
+#   GET  /audio-output, POST /audio-output   playback devices; POST {id} makes one the default
+#   GET  /sleep-timer, POST /sleep-timer     POST {minutes (0 = off), action: sleep|shutdown}
+#   POST /screen-off                turn the display off now
+#   POST /power/{sleep|restart|shutdown}
+#   POST /open-settings/{wifi|bluetooth|sound}   open that Windows Settings page
 #   POST /restart-launcher
 #   GET  /desktop, POST /desktop    escape hatch: start explorer.exe (PIN-checked when one is set)
-# Volume, audio output, sleep timer and power arrive with the Settings and Power pages (stage 3).
+#   POST /desktop-pin               {current, new}: set, change or (new empty) remove the PIN
 
-param([switch]$ManageLauncher, [switch]$Windowed)
+param([switch]$ManageLauncher, [switch]$Windowed, [switch]$TestMode)
 
 $ErrorActionPreference = 'Stop'
 . "$PSScriptRoot\common.ps1"
@@ -29,83 +37,8 @@ if (-not $mutex.WaitOne(0)) { Write-Host 'Helper already running.'; exit 0 }
 
 function Log([string]$m) { Write-TVLog 'helper' $m; Write-Host $m }
 
-# ---------- Win32 bits: Store app activation and bringing a window to the front ----------
-Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-
-namespace TVHelper {
-  [ComImport, Guid("2e941141-7f97-4756-ba1d-9decde894a3d"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-  interface IApplicationActivationManager {
-    void ActivateApplication([MarshalAs(UnmanagedType.LPWStr)] string appUserModelId,
-                             [MarshalAs(UnmanagedType.LPWStr)] string arguments, int options, out uint processId);
-  }
-  [ComImport, Guid("45BA127D-10A8-46EA-8AB7-56EA9078943C")]
-  class ApplicationActivationManager { }
-
-  public static class Native {
-    // Starts a Store app by its AUMID without going through explorer.exe (which would start the full desktop
-    // when it is not the shell). Returns the app's process id.
-    public static uint Activate(string aumid) {
-      var mgr = (IApplicationActivationManager)new ApplicationActivationManager();
-      uint pid;
-      mgr.ActivateApplication(aumid, null, 0, out pid);
-      return pid;
-    }
-
-    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
-    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
-    [DllImport("user32.dll")] static extern bool BringWindowToTop(IntPtr h);
-    [DllImport("user32.dll")] static extern bool ShowWindow(IntPtr h, int cmd);
-    [DllImport("user32.dll")] static extern bool IsIconic(IntPtr h);
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, IntPtr pid);
-    [DllImport("user32.dll")] static extern bool AttachThreadInput(uint a, uint b, bool attach);
-    [DllImport("user32.dll")] static extern void keybd_event(byte vk, byte scan, uint flags, UIntPtr extra);
-    [DllImport("kernel32.dll")] static extern uint GetCurrentThreadId();
-
-    // Windows only lets the foreground process hand over focus. The helper runs in the background,
-    // so borrow the foreground thread's input state (and, failing that, the Alt-key trick AutoHotkey uses).
-    public static bool ForceForeground(IntPtr h) {
-      if (IsIconic(h)) ShowWindow(h, 9);
-      IntPtr fg = GetForegroundWindow();
-      if (fg == h) return true;
-      uint fgThread = GetWindowThreadProcessId(fg, IntPtr.Zero), me = GetCurrentThreadId();
-      bool attached = fgThread != me && AttachThreadInput(me, fgThread, true);
-      BringWindowToTop(h);
-      SetForegroundWindow(h);
-      if (attached) AttachThreadInput(me, fgThread, false);
-      if (GetForegroundWindow() == h) return true;
-      keybd_event(0x12, 0, 0, UIntPtr.Zero); keybd_event(0x12, 0, 2, UIntPtr.Zero);
-      SetForegroundWindow(h);
-      return GetForegroundWindow() == h;
-    }
-
-    // The window's AppUserModelID (what the taskbar groups by). Store apps, including the ones that are
-    // really Edge web apps (Netflix today), carry "<PackageFamilyName>!<AppId>" here.
-    [StructLayout(LayoutKind.Sequential, Pack = 4)] struct PROPERTYKEY { public Guid fmtid; public uint pid; }
-    [StructLayout(LayoutKind.Explicit)] struct PROPVARIANT { [FieldOffset(0)] public ushort vt; [FieldOffset(8)] public IntPtr p; [FieldOffset(16)] public IntPtr pad; }
-    [ComImport, Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99"), InterfaceType(ComInterfaceType.InterfaceIsIUnknown)]
-    interface IPropertyStore { void GetCount(out uint c); void GetAt(uint i, out PROPERTYKEY k); void GetValue(ref PROPERTYKEY k, out PROPVARIANT v); }
-    [DllImport("shell32.dll")] static extern int SHGetPropertyStoreForWindow(IntPtr h, ref Guid iid, [MarshalAs(UnmanagedType.Interface)] out IPropertyStore ps);
-    [DllImport("ole32.dll")] static extern int PropVariantClear(ref PROPVARIANT v);
-
-    public static string WindowAumid(IntPtr h) {
-      try {
-        Guid iid = new Guid("886D8EEB-8CF2-4446-8D02-CDBA1DBDCF99");
-        IPropertyStore ps;
-        if (SHGetPropertyStoreForWindow(h, ref iid, out ps) != 0 || ps == null) return null;
-        var key = new PROPERTYKEY { fmtid = new Guid("9F4C2855-9F79-4B39-A8D0-E1D42DE1D5F3"), pid = 5 };
-        PROPVARIANT v;
-        ps.GetValue(ref key, out v);
-        string s = v.vt == 31 ? Marshal.PtrToStringUni(v.p) : null;   // VT_LPWSTR
-        PropVariantClear(ref v);
-        Marshal.ReleaseComObject(ps);
-        return s;
-      } catch { return null; }
-    }
-  }
-}
-'@
+# ---------- Windows APIs (Store app activation, window focus, audio, power): see Native.cs ----------
+Add-Type -TypeDefinition (Get-Content -Raw -Encoding UTF8 (Join-Path $PSScriptRoot 'Native.cs'))
 
 # ---------- state ----------
 $Helper   = Get-HelperInfo
@@ -117,6 +50,9 @@ $KeySeq   = 0
 $LastLaunched = $null
 $LauncherProc = $null
 $AllowedOrigins = @('null', 'http://localhost:8080', 'http://127.0.0.1:8080')   # file:// pages, and the dev server
+$SleepTimerFile = Join-Path $TV.Data 'sleep-timer.json'
+$SleepTimer = Read-JsonFile $SleepTimerFile       # {endsAt (ISO), action, minutes} or null; survives a helper restart
+$SettingsPages = @{ wifi = 'ms-settings:network-wifi'; bluetooth = 'ms-settings:bluetooth'; sound = 'ms-settings:sound' }
 
 function Get-Apps { Read-JsonFile (Join-Path $TV.Config 'apps.json') }
 function Get-Settings { Read-JsonFile (Join-Path $TV.Config 'settings.json') }
@@ -279,7 +215,7 @@ function Update-Settings {
     $s = Read-JsonFile $path
     if (-not $s) { $s = [pscustomobject]@{} }
     foreach ($p in $patch.PSObject.Properties) {
-        if ($p.Name -in 'helperPort', 'version') { continue }   # not changeable from the page
+        if ($p.Name -in 'helperPort', 'version', 'desktopPin') { continue }   # not changeable this way
         if ($s.PSObject.Properties[$p.Name]) { $s.($p.Name) = $p.Value }
         else { $s | Add-Member -NotePropertyName $p.Name -NotePropertyValue $p.Value }
     }
@@ -287,15 +223,128 @@ function Update-Settings {
     return $s
 }
 
+# ---------- desktop PIN (stored salted and hashed, never in plain text) ----------
+function Get-PinHash {
+    param([string]$Pin, [string]$Salt)
+    $sha = [Security.Cryptography.SHA256]::Create()
+    return [Convert]::ToBase64String($sha.ComputeHash([Text.Encoding]::UTF8.GetBytes("$Salt|$Pin")))
+}
+
+function Test-DesktopPin {
+    param([string]$Pin)
+    $stored = (Get-Settings).desktopPin
+    if (-not $stored) { return $true }                      # no PIN set
+    if ($stored -is [string]) { return $Pin -eq $stored }   # old plain format, replaced on next change
+    return (Get-PinHash $Pin $stored.salt) -eq $stored.hash
+}
+
+function Set-DesktopPin {
+    param([string]$Pin)
+    $path = Join-Path $TV.Config 'settings.json'
+    $s = Read-JsonFile $path
+    $value = $null
+    if ($Pin) {
+        $bytes = New-Object byte[] 12
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+        $salt = [Convert]::ToBase64String($bytes)
+        $value = [pscustomobject]@{ salt = $salt; hash = (Get-PinHash $Pin $salt) }
+    }
+    if ($s.PSObject.Properties['desktopPin']) { $s.desktopPin = $value } else { $s | Add-Member -NotePropertyName desktopPin -NotePropertyValue $value }
+    Write-TextAtomic $path ($s | ConvertTo-Json -Depth 10)
+}
+
+# ---------- power ----------
+# In test mode nothing is switched off: the action is logged and reported back to the page.
+function Invoke-Power {
+    param([ValidateSet('sleep', 'restart', 'shutdown', 'screen-off')][string]$Action, [string]$Reason = 'request')
+    if ($TestMode) { Log "TEST MODE: would $Action now ($Reason)"; return @{ ok = $true; testMode = $true; action = $Action } }
+    Log "power: $Action ($Reason)"
+    switch ($Action) {
+        'screen-off' { [TVHelper.Native]::MonitorOff() }
+        'sleep'      { [void][TVHelper.Native]::Sleep() }
+        'restart'    { Start-Process shutdown.exe -ArgumentList '/r /t 0' -WindowStyle Hidden }
+        'shutdown'   { Start-Process shutdown.exe -ArgumentList '/s /t 0' -WindowStyle Hidden }
+    }
+    return @{ ok = $true; action = $Action }
+}
+
+# ---------- sleep timer ----------
+function Get-SleepTimerState {
+    if (-not $SleepTimer) { return @{ active = $false; minutes = 0 } }
+    $ends = [DateTime]::Parse($SleepTimer.endsAt, [Globalization.CultureInfo]::InvariantCulture, [Globalization.DateTimeStyles]::RoundtripKind)
+    $remaining = [int][math]::Max(0, ($ends - (Get-Date)).TotalSeconds)
+    return @{ active = $true; minutes = $SleepTimer.minutes; action = $SleepTimer.action; endsAt = $SleepTimer.endsAt; remainingSec = $remaining }
+}
+
+function Set-SleepTimer {
+    param([int]$Minutes, [string]$Action)
+    if ($Minutes -le 0) {
+        $script:SleepTimer = $null
+        Remove-Item -LiteralPath $SleepTimerFile -ErrorAction SilentlyContinue
+        Log 'sleep timer off'
+    } else {
+        if ($Action -notin 'sleep', 'shutdown') { $Action = 'sleep' }
+        $script:SleepTimer = [pscustomobject]@{ minutes = $Minutes; action = $Action; endsAt = (Get-Date).AddMinutes($Minutes).ToString('o') }
+        Write-TextAtomic $SleepTimerFile ($SleepTimer | ConvertTo-Json -Compress)
+        Log "sleep timer: $Action in $Minutes min"
+    }
+    return Get-SleepTimerState
+}
+
+function Test-SleepTimer {
+    if (-not $SleepTimer) { return }
+    $st = Get-SleepTimerState
+    if ($st.remainingSec -gt 0) { return }
+    $action = $SleepTimer.action
+    [void](Set-SleepTimer 0 '')            # clear first, so waking up does not set it off again
+    [void](Invoke-Power $action 'sleep timer')
+}
+
+# ---------- audio ----------
+function Get-VolumeState { return @{ level = [TVHelper.Audio]::GetVolume(); muted = [TVHelper.Audio]::GetMute() } }
+
+function Set-VolumeState {
+    param($body)
+    if ($null -ne $body.delta) { [TVHelper.Audio]::SetVolume([TVHelper.Audio]::GetVolume() + [int]$body.delta) }
+    if ($null -ne $body.level) { [TVHelper.Audio]::SetVolume([int]$body.level) }
+    if ($null -ne $body.muted) { [TVHelper.Audio]::SetMute([bool]$body.muted) }
+    elseif ($null -ne $body.level -or $null -ne $body.delta) { [TVHelper.Audio]::SetMute($false) }   # changing volume unmutes, like a TV
+    return Get-VolumeState
+}
+
+function Get-AudioOutputs {
+    $list = @([TVHelper.Audio]::Devices() | ForEach-Object { @{ id = $_.Id; name = $_.Name; isDefault = $_.IsDefault } })
+    return @{ devices = $list }
+}
+
 # ---------- status ----------
+function Get-NetworkStatus {
+    $wifi = $null
+    try {
+        $lines = & netsh.exe wlan show interfaces 2>$null
+        if ($LASTEXITCODE -eq 0 -and $lines) {
+            $f = @{}
+            foreach ($line in $lines) { if ($line -match '^\s*([^:]+?)\s*:\s*(.*)$') { if (-not $f.ContainsKey($Matches[1])) { $f[$Matches[1]] = $Matches[2].Trim() } } }
+            if ($f['State']) {
+                $wifi = @{ state = $f['State']; ssid = $f['SSID']; signal = $f['Signal'] }
+            }
+        }
+    } catch { }
+    $wired = @(Get-NetAdapter -Physical -ErrorAction SilentlyContinue | Where-Object { $_.Status -eq 'Up' -and $_.MediaType -eq '802.3' }).Count -gt 0
+    return @{ wifi = $wifi; ethernet = $wired }
+}
+
 function Get-Status {
     $os = Get-CimInstance Win32_OperatingSystem
     $drive = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$($env:SystemDrive)'"
     return @{
         version   = $TV.Version
+        testMode  = [bool]$TestMode
         uptimeSec = [int]((Get-Date) - $os.LastBootUpTime).TotalSeconds
         helperUptimeSec = [int]((Get-Date) - $Started).TotalSeconds
         storage   = @{ drive = $env:SystemDrive; freeGB = [math]::Round($drive.FreeSpace / 1GB, 1); totalGB = [math]::Round($drive.Size / 1GB, 1) }
+        network   = Get-NetworkStatus
+        bluetooth = @{ available = [TVHelper.Native]::HasBluetoothRadio() }
     }
 }
 
@@ -346,7 +395,7 @@ function Handle-Request {
     if ($req.Headers['X-TV-Token'] -ne $Helper.token) { Send-Response $ctx 401 @{ error = 'bad token' }; return }
 
     switch -Regex ("$method $path") {
-        '^GET /ping$' { Send-Response $ctx 200 @{ ok = $true; version = $TV.Version }; return }
+        '^GET /ping$' { Send-Response $ctx 200 @{ ok = $true; version = $TV.Version; testMode = [bool]$TestMode }; return }
 
         '^GET /config/(apps|keymap|settings)$' {
             $file = Join-Path $TV.Config "$($Matches[1]).json"
@@ -385,17 +434,56 @@ function Handle-Request {
             return
         }
 
+        '^GET /volume$'  { Send-Response $ctx 200 (Get-VolumeState); return }
+        '^POST /volume$' { Send-Response $ctx 200 (Set-VolumeState (Read-Body $ctx)); return }
+
+        '^GET /audio-output$'  { Send-Response $ctx 200 (Get-AudioOutputs); return }
+        '^POST /audio-output$' {
+            $b = Read-Body $ctx
+            [TVHelper.Audio]::SetDefault([string]$b.id)
+            Log "audio output -> $($b.id)"
+            Send-Response $ctx 200 (Get-AudioOutputs); return
+        }
+
+        '^GET /sleep-timer$'  { Send-Response $ctx 200 (Get-SleepTimerState); return }
+        '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
+
+        '^POST /screen-off$' { Send-Response $ctx 200 (Invoke-Power 'screen-off' 'idle on home screen'); return }
+        '^POST /power/(sleep|restart|shutdown)$' {
+            $action = $Matches[1]
+            if ($TestMode) { Send-Response $ctx 200 (Invoke-Power $action 'power page'); return }
+            Send-Response $ctx 200 @{ ok = $true; action = $action }   # answer first: the page may not get a reply afterwards
+            Start-Sleep -Milliseconds 800
+            [void](Invoke-Power $action 'power page'); return
+        }
+
+        '^POST /open-settings/(wifi|bluetooth|sound)$' {
+            Start-Process $SettingsPages[$Matches[1]]
+            Send-Response $ctx 200 @{ ok = $true }; return
+        }
+
         '^GET /desktop$' {
-            $pin = (Get-Settings).desktopPin
-            Send-Response $ctx 200 @{ pinRequired = [bool]$pin }; return
+            Send-Response $ctx 200 @{ pinRequired = [bool](Get-Settings).desktopPin }; return
         }
         '^POST /desktop$' {
-            $pin = (Get-Settings).desktopPin
             $body = Read-Body $ctx
-            if ($pin -and (-not $body -or [string]$body.pin -ne [string]$pin)) { Send-Response $ctx 403 @{ error = 'wrong pin' }; return }
+            if (-not (Test-DesktopPin ([string]$body.pin))) { Log 'escape hatch: wrong PIN'; Send-Response $ctx 403 @{ error = 'wrong pin' }; return }
+            if ($TestMode -and (Get-Process explorer -ErrorAction SilentlyContinue)) {
+                Log 'TEST MODE: would start explorer.exe (it is already running)'
+                Send-Response $ctx 200 @{ ok = $true; testMode = $true }; return
+            }
             Log 'escape hatch: starting explorer.exe'
             Start-Process explorer.exe
             Send-Response $ctx 200 @{ ok = $true }; return
+        }
+        '^POST /desktop-pin$' {
+            $body = Read-Body $ctx
+            if (-not (Test-DesktopPin ([string]$body.current))) { Send-Response $ctx 403 @{ error = 'wrong pin' }; return }
+            $new = [string]$body.new
+            if ($new -and $new -notmatch '^\d{4}$') { Send-Response $ctx 400 @{ error = 'PIN must be 4 digits' }; return }
+            Set-DesktopPin $new
+            Log $(if ($new) { 'desktop PIN set' } else { 'desktop PIN removed' })
+            Send-Response $ctx 200 @{ ok = $true; pinRequired = [bool]$new }; return
         }
     }
     Send-Response $ctx 404 @{ error = 'not found'; path = $path }
@@ -405,7 +493,7 @@ function Handle-Request {
 $listener = New-Object Net.HttpListener
 $listener.Prefixes.Add($Prefix)
 $listener.Start()
-Log "helper $($TV.Version) listening on $Prefix (manageLauncher=$ManageLauncher windowed=$Windowed)"
+Log "helper $($TV.Version) listening on $Prefix (manageLauncher=$ManageLauncher windowed=$Windowed testMode=$TestMode)"
 
 function Test-LauncherAlive {
     if ($LauncherProc -and -not $LauncherProc.HasExited) { return $true }
@@ -425,6 +513,7 @@ try {
                 try { Send-Response $ctx 500 @{ error = $_.Exception.Message } } catch { }
             }
         }
+        try { Test-SleepTimer } catch { Log "sleep timer error: $($_.Exception.Message)" }
         # Keep the launcher window alive (checked every 5 s).
         if ($ManageLauncher -and ((Get-Date) - $lastCheck).TotalSeconds -ge 5) {
             $lastCheck = Get-Date

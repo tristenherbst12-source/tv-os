@@ -38,7 +38,7 @@ try { Invoke-RestMethod "$base/ping" -Headers $hdr -TimeoutSec 2 | Out-Null }
 catch { Write-Host 'Helper is not running. Start it first: scripts\start.cmd -Windowed' -ForegroundColor Red; exit 1 }
 if (-not (Get-Process AutoHotkey64, AutoHotkey -ErrorAction SilentlyContinue)) { Write-Host 'AutoHotkey (tv.ahk) is not running: Home will not work.' -ForegroundColor Yellow }
 
-$ids = if ($Apps) { $Apps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } } else { $cfg.apps.PSObject.Properties | Where-Object { $_.Value.launch.type -ne 'page' } | ForEach-Object Name }
+$ids = if ($Apps) { $Apps -split ',' | ForEach-Object { $_.Trim() } | Where-Object { $_ } } else { $cfg.apps.PSObject.Properties | Where-Object { $_.Value.launch.type -ne 'page' -and -not $_.Value.hidden } | ForEach-Object Name }
 $results = foreach ($id in $ids) {
     $a = $cfg.apps.$id
     $expect = if ($a.onHome) { $a.onHome } else { 'minimize' }

@@ -3,11 +3,15 @@
 #   hotkeys (hotkeys\tv.ahk, needs AutoHotkey v2)
 # This script stays running as a supervisor and restarts either one if it exits.
 #
-#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start.ps1 [-Windowed]
+#   powershell -NoProfile -ExecutionPolicy Bypass -File scripts\start.ps1 [-Windowed] [-TestMode]
 #
-#   -Windowed  launcher in a normal 1280x720 window instead of kiosk (for trying it on a desktop PC)
+#   -Windowed  launcher in a normal 1280x720 window instead of kiosk (for trying it on a desktop PC).
+#              Also turns on test mode.
+#   -TestMode  Sleep, Restart, Shut Down, the sleep timer and screen-off only pretend (logged, and the page
+#              says "Test Mode"). Use it to try the kiosk on a PC you do not want switched off.
 
-param([switch]$Windowed)
+param([switch]$Windowed, [switch]$TestMode)
+if ($Windowed) { $TestMode = $true }
 $ErrorActionPreference = 'Stop'
 . (Join-Path (Split-Path -Parent $PSScriptRoot) 'helper\common.ps1')
 
@@ -30,6 +34,7 @@ function Start-Helper {
     $a = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-WindowStyle', 'Hidden',
            '-File', "`"$(Join-Path $TV.Root 'helper\helper.ps1')`"", '-ManageLauncher')
     if ($Windowed) { $a += '-Windowed' }
+    if ($TestMode) { $a += '-TestMode' }
     Start-Process powershell.exe -ArgumentList ($a -join ' ') -WindowStyle Hidden -PassThru
 }
 

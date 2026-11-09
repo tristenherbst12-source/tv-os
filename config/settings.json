@@ -1,11 +1,9 @@
 {
-  "version": 1,
-  "wallpaper": "blue",
-  "lite": false,
-  "volume": 50,
-  "audioOutput": null,
-  "sleepTimer": { "minutes": 0, "action": "sleep" },
-  "screenOffMinutes": 0,
-  "desktopPin": null,
-  "helperPort": 8765
+    "version":  1,
+    "wallpaper":  "blue",
+    "lite":  false,
+    "sleepAction":  "sleep",
+    "screenOffMinutes":  0,
+    "desktopPin":  null,
+    "helperPort":  8765
 }

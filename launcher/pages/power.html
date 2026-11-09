@@ -1,0 +1,107 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Power</title>
+<link rel="preload" href="../fonts/InterVariable.woff2" as="font" type="font/woff2" crossorigin>
+<link rel="stylesheet" href="../css/launcher.css">
+<link rel="stylesheet" href="../css/pages.css">
+</head>
+<body>
+<div class="wall"><div class="blob a"></div><div class="blob b"></div><div class="blob c"></div><div class="blob d"></div></div>
+<div class="vignette"></div>
+
+<main class="screen">
+  <header class="page-head">
+    <div class="page-title">Power</div>
+    <div class="page-sub" id="sub">Choose What the TV PC Should Do</div>
+    <div class="status">
+      <div class="pill test" id="testPill" hidden>Test Mode</div>
+      <div class="pill"><span class="clock-small" id="clock">--:--</span></div>
+    </div>
+  </header>
+
+  <div class="power-wrap">
+    <div class="rows"><div class="row big power-row" id="tiles" style="--cols:3"></div></div>
+  </div>
+
+  <div class="hints">
+    <span><span class="key">◀ ▶</span>Move</span>
+    <span><span class="key">OK</span>Select</span>
+    <span><span class="key">Back</span>Home</span>
+  </div>
+</main>
+
+<script src="../js/helper-token.js"></script>
+<script src="../js/defaults.js"></script>
+<script src="../js/glyphs.js"></script>
+<script src="../js/themes.js"></script>
+<script src="../js/wallpaper.js"></script>
+<script src="../js/config.js"></script>
+<script src="../js/keys.js"></script>
+<script src="../js/ui.js"></script>
+<script>
+(async function () {
+  const { el } = TV.ui;
+  const ICONS = {
+    sleep: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+    restart: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/>',
+    shutdown: '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/>'
+  };
+  const ACTIONS = [
+    { id: 'sleep',    name: 'Sleep',     sub: 'Any Button on the Remote Wakes It', accent: '#5b8cff',
+      ask: 'Put the TV PC to Sleep?', text: 'Press any button on the remote to wake it up.', go: 'Sleep' },
+    { id: 'restart',  name: 'Restart',   sub: 'Start Fresh If Something Is Stuck', accent: '#f5a524',
+      ask: 'Restart the TV PC?', text: 'It comes back to this home screen in about a minute.', go: 'Restart' },
+    { id: 'shutdown', name: 'Shut Down', sub: 'Turns the PC Off Completely',       accent: '#ff4f6d',
+      ask: 'Shut Down the TV PC?', text: 'Use the power button on the PC to start it again.', go: 'Shut Down' }
+  ];
+
+  const host = document.getElementById('tiles');
+  const tiles = ACTIONS.map((a, i) => {
+    const t = el('div', 'tile');
+    t.style.setProperty('--accent', a.accent);
+    const ic = el('div', 'icon');
+    ic.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' + ICONS[a.id] + '</svg>';
+    const txt = el('div');
+    txt.append(el('div', 'name', a.name), el('div', 'sub', a.sub));
+    t.append(ic, txt);
+    t.addEventListener('mouseenter', () => focus(i));
+    t.addEventListener('click', () => { focus(i); choose(a); });
+    host.appendChild(t);
+    return t;
+  });
+
+  let f = 0, busy = false;
+  function focus(i) { tiles[f].classList.remove('focus'); f = i; tiles[f].classList.add('focus'); }
+
+  async function choose(a) {
+    if (busy) return;
+    if (!TV.helper.available) { TV.ui.toast('Needs the Helper, Which Is Not Running'); return; }
+    busy = true;
+    const ok = await TV.ui.confirm({ title: a.ask, text: a.text,
+      buttons: [{ label: 'Cancel', value: false }, { label: a.go, value: true, danger: a.id !== 'sleep' }] });
+    if (ok) {
+      try {
+        const r = await TV.helper.request('/power/' + a.id, { method: 'POST' });
+        if (r.testMode) TV.ui.toast('Test Mode: The PC Would ' + a.go + ' Now');
+        else document.getElementById('sub').textContent = a.id === 'sleep' ? 'Going to Sleep…' : a.id === 'restart' ? 'Restarting…' : 'Shutting Down…';
+      } catch (e) { TV.ui.toast('Could Not ' + a.go); }
+    }
+    busy = false;
+  }
+
+  await TV.ui.startPage(action => {
+    if (action === 'left') { focus(Math.max(0, f - 1)); return true; }
+    if (action === 'right') { focus(Math.min(tiles.length - 1, f + 1)); return true; }
+    if (action === 'ok') { choose(ACTIONS[f]); return true; }
+    return action === 'up' || action === 'down' || action === 'lite';
+  });
+  focus(0);
+  if (TV.helper.available) TV.helper.request('/ping')
+    .then(st => { document.getElementById('testPill').hidden = !st.testMode; }).catch(() => {});
+})();
+</script>
+</body>
+</html>
