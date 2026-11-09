@@ -116,3 +116,12 @@ body.lite .blob{animation:none}
 body.lite .tile,body.lite .pill,body.lite .launch{backdrop-filter:none;-webkit-backdrop-filter:none}
 body.lite .tile{background:rgba(30,30,50,.72)}
 body.lite .tile.focus{background:rgba(55,55,85,.85)}
+
+/* ---------- "Next Session" chip (Race Calendar, added in stage 4) ---------- */
+.race-chip{color:var(--text)}
+.race-chip[hidden]{display:none}
+.race-chip .sbadge{display:inline-grid;place-items:center;padding:calc(var(--u)*.15) calc(var(--u)*.55);border-radius:calc(var(--u)*.45);
+  font-size:calc(var(--u)*.9);font-weight:800;letter-spacing:.02em;color:#fff;background:var(--accent,#e10600)}
+.race-chip .when{color:var(--dim)}
+.race-chip.live .when{color:#ff8a9c;font-weight:650}
+.top .status-left{right:auto;left:0}

@@ -203,6 +203,47 @@
     TV.helper.request('/screen-off', { method: 'POST' }).catch(() => { screenOffSent = false; });
   }
 
+  /* ---------- "Next Session" chip: the next F1 or WEC session (data from js/races.js) ---------- */
+  const CHIP_ACCENT = { F1: '#e10600', WEC: '#2f7bff' };
+  let raceSessions = [];
+  function drawChip() {
+    const now = new Date();
+    const live = s => s.timeKnown && s.start <= now && now < s.end;
+    const s = raceSessions.find(live) || raceSessions.find(x => x.start > now || (!x.timeKnown && x.end > now));
+    const chip = $('raceChip');
+    if (!s) { chip.hidden = true; return; }
+    let when;
+    if (live(s)) when = 'Live Now';
+    else {
+      const startOfDay = d => new Date(d.getFullYear(), d.getMonth(), d.getDate());
+      const days = Math.round((startOfDay(s.start) - startOfDay(now)) / 864e5);
+      const mins = Math.ceil((s.start - now) / 6e4);
+      const hm = ' ' + s.start.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
+      const day = days === 0 ? 'Today' : days === 1 ? 'Tomorrow'
+                : days < 7 ? s.start.toLocaleDateString('en-GB', { weekday: 'long' })
+                : s.start.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short' });
+      when = !s.timeKnown ? day
+           : mins < 60 ? 'In ' + mins + ' Min'
+           : mins < 6 * 60 ? 'In ' + Math.floor(mins / 60) + 'h ' + (mins % 60) + 'm'
+           : day + hm;
+    }
+    const event = s.event.replace(/ Grand Prix$/, ' GP');
+    $('rcSeries').textContent = s.series;
+    chip.style.setProperty('--accent', CHIP_ACCENT[s.series] || '#8a8fb3');
+    chip.classList.toggle('live', when === 'Live Now');
+    $('rcText').innerHTML = '';
+    const name = document.createElement('span'); name.textContent = event + ' ' + s.session;
+    const w = document.createElement('span'); w.className = 'when'; w.textContent = '· ' + when;
+    $('rcText').append(name, ' ', w);
+    chip.hidden = false;
+  }
+  function startChip() {
+    const onData = d => { raceSessions = d.sessions; drawChip(); };
+    TV.races.load(onData).catch(e => console.warn('[home] race chip', e));
+    setInterval(drawChip, 30e3);
+    setInterval(() => TV.races.load(onData).catch(() => {}), 6 * 3600e3);
+  }
+
   /* ---------- start ---------- */
   async function start() {
     cfg = await TV.config.loadAll();
@@ -223,6 +264,7 @@
     document.addEventListener('keydown', onKey);
     window.addEventListener('focus', () => { if (busy && !$('launch').classList.contains('error')) hideOverlay(); });
     document.body.classList.add('ready');
+    startChip();
   }
 
   start();

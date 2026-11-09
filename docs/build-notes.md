@@ -37,6 +37,14 @@ Findings made while building, which later stages depend on. Newest first.
 - Rows used `mouseenter` at first; scrolling moved rows under a resting pointer and stole the focus, so rows use
   `mousemove` (matters for the air mouse).
 
+### "Next Session" chip on the home screen (approved by the owner)
+- A pill in the top-left corner of the home screen (the greeting is centred, so the right side had no room):
+  series badge, event ("Grand Prix" shortened to "GP"), session, and when: "Fri 20 Nov 02:30", then the
+  weekday within a week, "Tomorrow 02:30", "In 3h 20m" under 6 hours, "In 40 Min", "Live Now".
+- Same data and offline copy as the Race Calendar page; hidden when there is nothing upcoming. Not focusable;
+  the Race Calendar tile opens the page.
+- Tested with the real calendar and with a made-up session 40 minutes ahead and 20 minutes in.
+
 ### For the TV PC
 - When the helper is down, Windows takes about 2 s to refuse each localhost connection, so pages load slower in
   that state only.
