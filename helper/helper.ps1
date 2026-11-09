@@ -154,6 +154,10 @@ function Start-EdgeWindow {
     if ($App) { $edgeArgs += @("--app=`"$($l.url)`"", '--start-fullscreen') }
     else      { $edgeArgs += @('--start-maximized', "`"$($l.url)`"") }
     if ($l.userAgent) { $edgeArgs += "--user-agent=`"$($l.userAgent)`"" }
+    if ($l.scale) {
+        # Zoom for the couch. Applies to this profile's own Edge process only, never to the user's everyday Edge.
+        $edgeArgs += "--force-device-scale-factor=$([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', [double]$l.scale))"
+    }
     if ($l.forceH264) {
         # Haswell has no VP9 decode: this small extension makes sites think only H.264 is playable.
         $ext = Join-Path $TV.Root 'extensions\h264only'

@@ -10,8 +10,7 @@
     "youtube": {
       "name": "YouTube", "sub": "Videos", "accent": "#ff3d3d", "glyph": "play",
       "icon": "icons/youtube.png", "iconBg": null,
-      "launch": { "type": "edge-app", "url": "https://www.youtube.com/tv", "profile": "youtube", "forceH264": true,
-                  "userAgent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) 76.0.3809.146/6.0 TV Safari/537.36" },
+      "launch": { "type": "edge-app", "url": "https://www.youtube.com/", "profile": "youtube", "forceH264": true, "scale": 1.5 },
       "onHome": "close"
     },
     "netflix": {
@@ -68,6 +67,8 @@
     "store.package: package Name used to find the app with Get-AppxPackage. aumid is resolved at setup time (PackageFamilyName!AppId).",
     "onHome: what the Home button does to this app. close = end it, minimize = keep running (Spotify keeps playing). Browser closes because opening it again would add a second window.",
     "edge / edge-app: each gets its own Edge profile (profile name) under %LOCALAPPDATA%/TVLauncher/profiles, so logins stick. edge-app opens full screen without browser bars.",
-    "userAgent: youtube.com/tv only shows the TV interface to TV browsers. forceH264 loads extensions/h264only (Haswell cannot decode VP9 in hardware)."
+    "scale: makes everything in that one window bigger for viewing from the couch (1.5 = 150%). It only affects the window the tile opens: it runs as its own Edge process with its own profile.",
+    "userAgent (optional): pretend to be another browser in that window. Not used: youtube.com/tv cannot be reached from a desktop browser (see docs/build-notes.md).",
+    "forceH264 loads extensions/h264only (Haswell cannot decode VP9 in hardware)."
   ]
 }

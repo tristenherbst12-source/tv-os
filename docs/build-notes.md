@@ -47,8 +47,10 @@ Follow-up investigation (9 November):
   Google check that the browser is what it claims to be.
 - Going further would mean defeating Google's browser-genuineness and bot checks. We are not doing that: it is
   against YouTube's terms and would break whenever Google changes the check.
-- **Decision:** the tile stays YouTube in its own full-screen Edge window. What it opens (desktop site, scaling for
-  the couch) is still to be settled. See the stage 2 follow-up.
+- **Decision:** the tile opens the normal `https://www.youtube.com/` in its own full-screen Edge window at 150%
+  (`"scale": 1.5` in apps.json → `--force-device-scale-factor`), with no fake user agent. The zoom applies only to
+  that window's own Edge process; the user's everyday Edge is unaffected (checked on the dev PC). The air-mouse
+  pointer drives it. Sign in to YouTube once in that window; the profile keeps the login.
 
 ### H.264 only
 `extensions/h264only` loads with `--load-extension` (Edge registered it in the YouTube profile). It is unpacked, so
