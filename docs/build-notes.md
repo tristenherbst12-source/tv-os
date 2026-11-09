@@ -35,16 +35,37 @@ sync on, it also pulls in the user's extensions (Teleparty opened a sign-up tab 
   the launcher watchdog relies on
 - Check that the Netflix web app still works with these set.
 
-### YouTube TV interface: blocked
+### YouTube TV interface: blocked, and we stop here
 `https://www.youtube.com/tv` answers every desktop browser with "You are being directed to youtube.com". Tested
-with Tizen, webOS, Xbox One, PS4 Leanback and Cobalt user agents (one in a real window, the others headless). The
-user agent alone no longer gets the TV interface. **Decision needed** (open item in HANDOVER section 9).
+with Tizen, webOS, Xbox One, PS4 Leanback and Cobalt user agents (one in a real window, the others headless).
+Follow-up investigation (9 November):
+- YouTube's server decides. To a TV user agent with plain headers it sends the full TV app (~200 KB); to a desktop
+  browser it sends a 5.7 KB page whose inline script redirects to `youtube.com/?app=desktop`.
+- Changing the user agent, User-Agent Client Hints, `navigator.platform` and `navigator.userAgentData` did not
+  change the answer.
+- Google sites also receive browser-validation headers from Edge (`x-browser-validation` and others) that let
+  Google check that the browser is what it claims to be.
+- Going further would mean defeating Google's browser-genuineness and bot checks. We are not doing that: it is
+  against YouTube's terms and would break whenever Google changes the check.
+- **Decision:** the tile stays YouTube in its own full-screen Edge window. What it opens (desktop site, scaling for
+  the couch) is still to be settled. See the stage 2 follow-up.
 
 ### H.264 only
 `extensions/h264only` loads with `--load-extension` (Edge registered it in the YouTube profile). It is unpacked, so
 Edge may show a "Turn off extensions in developer mode" bubble. Check on the TV whether it appears in the
 full-screen app window.
 
+### Tested on the dev PC (AutoHotkey 2.0.31)
+`scripts/test-apps.ps1` opens every app tile through the helper, sends the Home key the way a remote would, and
+checks the result. All 7 pass: Netflix, Prime Video and Disney+ close; Spotify minimises; F1TV, Browser and YouTube
+close; the launcher is back in front each time. On a web app's very first launch, Edge shows an "App installed"
+pop-up in front of it, which Home only minimises; from the second launch it is fine.
+- Prime Video (`AmazonVideo.PrimeVideo`, app ID `PWA`) and Disney+ (`Disney.37853FC22B2CE`, app ID `App`) are Edge
+  web apps too. Spotify's Store package includes the real `Spotify.exe`, so it is found by install folder.
+- Back: a tap goes to the app; holding it for 0.8 s goes Home. This works repeatedly (the first version used
+  `KeyWait` and never detected the hold).
+- tv.ahk sends key presses to the helper while the launcher is in front (for the key-test page).
+
 ### Not tested yet
-- `hotkeys/tv.ahk`: AutoHotkey is not installed on the dev PC. It is written for v2 but has never been run.
-- Kiosk mode (only `-Windowed` was tried), F1TV, Spotify, and the Home and Back buttons on the real remote.
+- Kiosk mode (only `-Windowed` was tried), the escape hatch hotkey (it starts `explorer.exe`, which is already
+  running on the dev PC), and the Home and Back buttons on a real remote.
