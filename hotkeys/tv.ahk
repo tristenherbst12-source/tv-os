@@ -154,14 +154,30 @@ GoHome(*) {
 }
 
 ; ---------- Back: short press passes through, long press goes Home ----------
-BackPressed(hk) {
+; Timed from the key-down to the key-up event. (KeyWait cannot be used: the hotkey blocks the key, so its
+; logical state never changes.) Auto-repeat key-downs while held are ignored.
+global BackState := Map()           ; key -> "down" | "fired"
+
+BackDown(hk) {
     key := RegExReplace(hk, "^[~$*]+")
-    if KeyWait(key, "T" BackHoldSeconds) {
-        Send("{" key "}")               ; released quickly: give the app its Back
-    } else {
+    if BackState.Has(key)
+        return                          ; auto-repeat
+    BackState[key] := "down"
+    SetTimer(BackHeld.Bind(key), -Round(BackHoldSeconds * 1000))
+}
+
+BackHeld(key) {
+    if (BackState.Has(key) && BackState[key] = "down") {
+        BackState[key] := "fired"
         GoHome()
-        KeyWait(key)                    ; swallow the rest of the hold
     }
+}
+
+BackUp(hk) {
+    key := RegExReplace(hk, "^[~$*]+|\s+up$")
+    state := BackState.Has(key) ? BackState.Delete(key) : ""
+    if (state = "down")
+        Send("{" key "}")               ; released quickly: give the app its Back
 }
 
 ; ---------- escape hatch ----------
@@ -193,8 +209,11 @@ HotIf((*) => !LauncherActive())
 for k in JsonArray(km, "global", "home")
     try Hotkey("$" k, GoHome)
 for k in JsonArray(km, "global", "back")
-    try Hotkey("$" k, BackPressed)
+    try Hotkey("$" k, BackDown)
 HotIf()
+; Key-up is watched everywhere and always let through (~): a hold that ends on the launcher must still be cleared.
+for k in JsonArray(km, "global", "back")
+    try Hotkey("~$" k " up", BackUp)
 for k in JsonArray(km, "global", "escapeHatch")
     try Hotkey("$" k, EscapeHatch)
 
