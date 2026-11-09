@@ -39,7 +39,13 @@ window.TV = window.TV || {};
       body: opts.body ? JSON.stringify(opts.body) : undefined,
       signal: timeout(opts.timeout || 3000)
     });
-    if (!res.ok) throw new Error('helper ' + res.status + ' on ' + path);
+    if (!res.ok) {
+      const err = new Error('helper ' + res.status + ' on ' + path);
+      err.status = res.status;
+      try { err.body = await res.json(); } catch (e) { /* not json */ }
+      throw err;
+    }
+    if (res.status === 204) return null;
     const type = res.headers.get('Content-Type') || '';
     return type.includes('json') ? res.json() : res.text();
   }

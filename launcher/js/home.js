@@ -143,7 +143,9 @@
       setTimeout(hideOverlay, 2500);
     } catch (e) {
       console.warn('launch failed', a.id, e);
-      overlay(a, 'Could Not Open ' + a.name, 'Helper Not Responding', true);
+      const msg = e.status === 404 && e.body && e.body.error === 'not installed' ? 'App Not Installed'
+                : e.status ? 'Something Went Wrong (' + e.status + ')' : 'Helper Not Responding';
+      overlay(a, 'Could Not Open ' + a.name, msg, true);
       setTimeout(hideOverlay, 2200);
     }
   }

@@ -10,7 +10,8 @@
     "youtube": {
       "name": "YouTube", "sub": "Videos", "accent": "#ff3d3d", "glyph": "play",
       "icon": "icons/youtube.png", "iconBg": null,
-      "launch": { "type": "edge-app", "url": "https://www.youtube.com/tv", "profile": "youtube", "tvUserAgent": true, "forceH264": true },
+      "launch": { "type": "edge-app", "url": "https://www.youtube.com/tv", "profile": "youtube", "forceH264": true,
+                  "userAgent": "Mozilla/5.0 (SMART-TV; Linux; Tizen 6.0) AppleWebKit/537.36 (KHTML, like Gecko) 76.0.3809.146/6.0 TV Safari/537.36" },
       "onHome": "close"
     },
     "netflix": {
@@ -45,8 +46,8 @@
     },
     "browser": {
       "name": "Browser", "accent": "#14c3b4", "glyph": "globe",
-      "launch": { "type": "edge", "url": "https://www.google.com" },
-      "onHome": "minimize"
+      "launch": { "type": "edge", "url": "https://www.google.com", "profile": "browser" },
+      "onHome": "close"
     },
     "races": {
       "name": "Race Calendar", "accent": "#f5a524", "glyph": "cal",
@@ -65,6 +66,8 @@
     "icon: path relative to launcher/. Filled by scripts/extract-icons.ps1 (stage 5). If the file is missing, the tile shows its glyph.",
     "iconBg: plate colour behind the icon (Store manifest BackgroundColor). null = use accent; 'transparent' = no plate.",
     "store.package: package Name used to find the app with Get-AppxPackage. aumid is resolved at setup time (PackageFamilyName!AppId).",
-    "onHome: what the Home button does to this app. close = end it, minimize = keep running (Spotify keeps playing)."
+    "onHome: what the Home button does to this app. close = end it, minimize = keep running (Spotify keeps playing). Browser closes because opening it again would add a second window.",
+    "edge / edge-app: each gets its own Edge profile (profile name) under %LOCALAPPDATA%/TVLauncher/profiles, so logins stick. edge-app opens full screen without browser bars.",
+    "userAgent: youtube.com/tv only shows the TV interface to TV browsers. forceH264 loads extensions/h264only (Haswell cannot decode VP9 in hardware)."
   ]
 }
