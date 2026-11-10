@@ -17,7 +17,7 @@ window.TV_DEFAULTS = {
     },
     "netflix": {
       "name": "Netflix", "sub": "Series and Films", "accent": "#d81f26", "glyph": "film",
-      "icon": "icons/netflix.png", "iconBg": null,
+      "icon": "icons/netflix.png", "iconBg": "#000000",
       "launch": { "type": "store", "package": "4DF9E0F8.Netflix", "aumid": null },
       "onHome": "close"
     },
@@ -41,7 +41,7 @@ window.TV_DEFAULTS = {
     },
     "spotify": {
       "name": "Spotify", "sub": "Music", "accent": "#1ed760", "glyph": "music",
-      "icon": "icons/spotify.png", "iconBg": null,
+      "icon": "icons/spotify.png", "iconBg": "#000000",
       "launch": { "type": "store", "package": "SpotifyAB.SpotifyMusic", "aumid": null, "exeFallback": "%APPDATA%\\Spotify\\Spotify.exe" },
       "onHome": "minimize"
     },
