@@ -92,6 +92,12 @@ function Get-ProfileWindow {
         Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
 }
 
+function Get-FreePort {
+    $l = [Net.Sockets.TcpListener]::new([Net.IPAddress]::Loopback, 0)
+    $l.Start(); $port = $l.LocalEndpoint.Port; $l.Stop()
+    return $port
+}
+
 function Start-EdgeWindow {
     param($l, [string]$ProfileName, [switch]$App)
     # Already open (e.g. Spotify minimised with music playing): bring that window back instead of opening a
@@ -99,10 +105,12 @@ function Start-EdgeWindow {
     $running = Get-ProfileWindow $ProfileName
     if ($running) { [void][TVHelper.Native]::ForceForeground($running.MainWindowHandle); return 'resumed' }
 
-    # DisableLoadExtensionCommandLineSwitch: newer Edge builds otherwise switch --load-extension extensions off
-    # again from the second start of a profile (found 11 Nov 2026).
+    # Remote navigation is added by helper\tvnav-host.ps1 over a local debugging port (127.0.0.1 only), not as an
+    # extension: Edge switches --load-extension extensions off from a profile's second start.
+    $port = Get-FreePort
     $edgeArgs = @("--user-data-dir=`"$(Get-ProfileDir $ProfileName)`"", '--no-first-run', '--no-default-browser-check', '--disable-sync',
-              '--autoplay-policy=no-user-gesture-required', '--disable-features=Translate,DisableLoadExtensionCommandLineSwitch')
+              '--autoplay-policy=no-user-gesture-required', '--disable-features=Translate',
+              "--remote-debugging-port=$port", '--remote-debugging-address=127.0.0.1')
     if ($App) { $edgeArgs += @("--app=`"$($l.url)`"", '--start-fullscreen') }
     else      { $edgeArgs += @('--start-maximized', "`"$($l.url)`"") }
     if ($l.userAgent) { $edgeArgs += "--user-agent=`"$($l.userAgent)`"" }
@@ -110,11 +118,11 @@ function Start-EdgeWindow {
         # Zoom for the couch. Applies to this profile's own Edge process only, never to the user's everyday Edge.
         $edgeArgs += "--force-device-scale-factor=$([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', [double]$l.scale))"
     }
-    # Remote navigation (arrows / OK / Back) in every TV window; H.264 only where asked for (Haswell has no VP9).
-    $exts = @(Join-Path $TV.Root 'extensions\tvnav')
-    if ($l.forceH264) { $exts += Join-Path $TV.Root 'extensions\h264only' }
-    $edgeArgs += "--load-extension=`"$($exts -join ',')`""
     $p = Start-Process -FilePath (Get-EdgePath) -ArgumentList ($edgeArgs -join ' ') -PassThru
+    # Remote navigation (arrows / OK / Back) in every TV window; H.264 only where asked for (Haswell has no VP9).
+    $hostArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $PSScriptRoot 'tvnav-host.ps1')`" -Port $port -Name $ProfileName"
+    if ($l.forceH264) { $hostArgs += ' -H264' }
+    Start-Process powershell.exe -ArgumentList $hostArgs -WindowStyle Hidden | Out-Null
     # If this profile was already running, Edge hands the request over and this process exits at once.
     $h = Wait-MainWindow $p.Id 10
     if ($h -ne [IntPtr]::Zero) { [void][TVHelper.Native]::ForceForeground($h) }

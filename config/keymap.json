@@ -14,7 +14,10 @@
     "home":        ["Browser_Home"],
     "back":        ["Backspace", "Browser_Back"],
     "block":       ["Browser_Search"],
-    "escapeHatch": ["^!+d"]
+    "escapeHatch": ["^!+d"],
+    "volumeUp":    ["Volume_Up"],
+    "volumeDown":  ["Volume_Down"],
+    "mute":        ["Volume_Mute"]
   },
   "_notes": [
     "launcher: browser KeyboardEvent values. Each entry matches either e.key or e.code (e.g. 'Enter' or 'NumpadEnter').",
@@ -22,7 +25,8 @@
     "home: always caught by tv.ahk. In an app it goes home; on the launcher it is turned into F24, because Edge itself would open its own home page on Browser_Home.",
     "back: a tap goes to the app (the TV windows turn it into 'back'); holding it 0.8 s goes home.",
     "block: swallowed, so Windows does not act on them (the remote's search button opens a Bing search otherwise).",
-    "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; volume and media keys are left to Windows.",
+    "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; media keys are left to the apps.",
+    "volumeUp/volumeDown/mute: handled by tv.ahk on the TV (2% steps, with a volume bar). Windows does this in Explorer, which the TV does not run.",
     "To check another remote: Settings > Remote Button Test."
   ]
 }

@@ -244,3 +244,51 @@ pop-up in front of it, which Home only minimises; from the second launch it is f
 ### Not tested yet
 - Kiosk mode (only `-Windowed` was tried), the escape hatch hotkey (it starts `explorer.exe`, which is already
   running on the dev PC), and the Home and Back buttons on a real remote.
+
+## Stage 6, round 2 (11 Nov 2026): new SSD install
+
+### Endless restart in kiosk mode
+In kiosk mode Edge titles the launcher window `Home - [InPrivate] - Microsoft Edge`, not `Home`. The round 1
+"left the TV pages" check did not recognise that and reloaded the home screen every 10 s, forever. The check now
+accepts the suffix, allows at most 3 reloads in 10 minutes, and the escape hatch stops supervising.
+
+### Speed on the HD 4400
+Measured at 1080p with the GPU switched off (software drawing makes the cost visible): 8 fps before, about
+40 after. The cost was a live `blur(90px)` on the four drifting wallpaper blobs and `backdrop-filter` on every
+tile, pill and settings row, all redone every frame. Blobs are now radial gradients (palette crossfade kept
+with `@property`), the glass has no backdrop blur, the focus glow fades in on `::after` instead of animating a
+big `box-shadow`, and full-screen blurs (launch overlay, dialogs) pause the wallpaper. The sliding Watch row is
+no longer clipped (that cut the glow off); tiles outside the 6 shown fade out.
+
+### Volume buttons
+Windows turns the volume keys into volume changes in Explorer, which does not run on the TV, so they did nothing.
+tv.ahk now handles them (2 % steps, mute) and shows a small volume bar (TV only, not with `-Windowed`).
+
+### Remote navigation no longer an Edge extension
+Edge 157.0.4341.46 switches `--load-extension` extensions off from a profile's second start again; the
+`DisableLoadExtensionCommandLineSwitch` workaround from round 1 stopped working. Each TV window now opens with
+`--remote-debugging-port` (a free port, 127.0.0.1 only) and `helper/tvnav-host.ps1` attaches to it, adds
+`inject/tvnav.js` (and `inject/h264only.js` for YouTube) to every page, and turns OK into a real click inside the
+page (`Input.dispatchMouseEvent`; the real pointer does not move). Prime Video's cards and profile menu only
+respond to real clicks. Gotcha: text read with `Get-Content` carries file details that `ConvertTo-Json` then
+serialises too (very slowly), so the scripts are read with `[IO.File]::ReadAllText`.
+
+### Navigation rules (inject/tvnav.js), tested signed out on Prime Video, YouTube, Twitch, Spotify, Netflix,
+Disney+, DStv and F1TV
+- Up/Down go to the next row and keep the column (remembered from the last Left/Right); straight below first,
+  then the nearest thing counting sideways distance at half.
+- From a card, its caption (title, channel, tags) and small links between rows ("See more") are stepped over.
+- Left/Right stay level with the current item; at the end of a row nothing happens. Past the last visible card a
+  carousel's hidden cards are reached, pressing the carousel's own arrow to bring them into view.
+- Duplicate links are merged only when touching (merging the same film in neighbouring rows skipped rows).
+- Skipped: empty see-through boxes, things covered by something else (but not by their own label, Netflix's
+  sign-in), containers holding several buttons, screen-wide banners.
+- Tiles whose title is the only link (Spotify) are one stop.
+- An open pop-up (dialog / aria-modal) keeps the highlight inside it; after OK opens a menu, its new items come
+  first, and Up past the first one returns to the button.
+- "Watching" (Left/Right skip, OK full screen) only for a video you started (OK or Play shortly before it began,
+  remembered across the page change) or one that is full screen: self-starting trailers no longer take over the
+  arrows. Live streams are not skipped through.
+
+Not covered: cookie pop-ups inside a cross-site frame (F1TV's) need the touchpad once. Signed-in pages (profile
+pickers, Netflix rows, Disney+ rows, DStv channels) could not be tried here.

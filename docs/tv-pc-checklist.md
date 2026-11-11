@@ -34,13 +34,18 @@ robocopy C:\Users\trist\OneDrive\Dokumente\appdev\tv-os E:\TVLauncher /E /XD .gi
 - [ ] **The pointer disappears** when you press a button or leave the touchpad for 3 s, and comes back (where it
       was) when you touch the touchpad.
 - [ ] Home returns home from every app; **holding Back** returns home; a short Back goes back inside apps.
-- [ ] Volume and play/pause buttons work.
+- [ ] **Volume buttons change the volume** and a small volume bar appears (also inside apps); mute works.
+- [ ] Play/pause works in the apps.
 - [ ] Settings > Remote Button Test: anything without a "Launcher Action" is noted.
 
 ## Apps (sign in to each once; the window keeps the login)
 For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 - [ ] Opens full screen, **no title bar**, text readable from the couch (scale 125%, YouTube 150%).
-- [ ] **Arrows move a blue highlight**, OK opens what it is on, Back goes back a page.
+- [ ] **Arrows move a blue highlight**: Left/Right along a row (the row slides on past the last visible card), Up/Down
+      to the next row of cards (not onto titles or "See more"), staying in the same column. Right at the end of a row
+      does nothing.
+- [ ] OK opens what it is on (Prime Video cards, profile button and its menu too), Back goes back a page.
+- [ ] Trailers that play by themselves (Prime, Netflix banners) do not take over Left/Right.
 - [ ] Playing a video: Left/Right skip 10 s, OK goes full screen then pauses, Back leaves full screen.
 - [ ] Plays in 1080p without stuttering (YouTube: H.264 is forced).
 - [ ] Home closes it and the home screen comes back.
@@ -66,4 +71,4 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       in the evening.
 
 ## Logs to bring back if something fails
-`C:\Users\TV\AppData\Local\TVLauncher\logs\helper.log` and `start.log`.
+`C:\Users\TV\AppData\Local\TVLauncher\logs\helper.log`, `start.log` and `tvnav-host.log`.

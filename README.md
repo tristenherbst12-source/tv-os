@@ -103,15 +103,18 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 
 | Button | On the home screen | Inside an app |
 |---|---|---|
-| Arrows | Move between tiles | Move the highlight to the next thing in that direction |
+| Arrows | Move between tiles | Move the highlight: Left/Right along a row, Up/Down to the next row (keeping the column) |
 | OK | Open | Press the highlighted thing |
 | Back | Back to the home screen | Back a page (or out of full screen); **hold** it to go home |
 | Home | – | Back to the home screen |
-| While watching | | Left/Right skip 10 s; OK makes the video full screen, then pauses/plays |
-| Play/Pause, volume | Work everywhere | |
+| While watching | | Left/Right skip 10 s (not on live streams); OK makes the video full screen, then pauses/plays |
+| Volume | A small volume bar shows the level | Same |
+| Play/Pause | Works in the apps | |
 | L (keyboard) | Lite Mode on/off (less animation, if the PC struggles) | |
 
 - The pointer disappears while you use the buttons; touch the touchpad and it comes back.
+- A pop-up (cookie choices, a profile menu) keeps the highlight inside it until it closes. Cookie pop-ups shown in
+  an embedded frame (F1TV) need the touchpad, once.
 - **Spotify** keeps playing when you press Home; the other apps close.
 - **Settings** has the volume, sound output, sleep timer, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
@@ -151,6 +154,7 @@ settings stay as they are.
 - **The home screen does not come back after an app:** press Home, or hold Back.
 - **A tile says "App Not Installed":** install that app from the Store (step 3).
 - **Everything is slow or stutters:** press L or turn on Settings > Lite Mode.
-- **Logs:** `C:\Users\TV\AppData\Local\TVLauncher\logs` (`helper.log` and `start.log`).
+- **Logs:** `C:\Users\TV\AppData\Local\TVLauncher\logs` (`helper.log`, `start.log`, and `tvnav-host.log` for the
+  remote navigation inside the apps).
 - **Trying it on another PC without changing it:** `scripts\start.cmd -Windowed` runs it in a window in test mode
   (Sleep, Restart and Shut Down only pretend).

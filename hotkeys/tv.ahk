@@ -3,6 +3,8 @@
 ; - Back (remote):    a short press goes to the app as normal; holding it for 0.8 s also goes Home.
 ; - Blocked keys:     e.g. the remote's Search button, which would otherwise open a web search.
 ; - Pointer:          hidden while the remote's buttons are used (not with -Windowed).
+; - Volume keys:      change the volume, with a small volume bar (not with -Windowed). Windows normally does this
+;                     in Explorer, which does not run on the TV, so without this the volume buttons do nothing.
 ; - Escape hatch:     Ctrl+Alt+Shift+D by default: start the Windows desktop (asks for the PIN when one is set).
 ; - While the launcher is in front, every key is reported to the helper for the key-test page.
 ; Keys come from config/keymap.json ("global" section, AutoHotkey key names).
@@ -228,7 +230,7 @@ BackApplies(*) => !LauncherActive() && (!Windowed || TVWindowActive())
 ; The touchpad only moves the pointer when touched, so: hidden on any key press or after 3 s without moving,
 ; shown again (where it was) as soon as it moves. While hidden it is parked in the bottom-right corner, so web
 ; pages do not keep showing hover previews under it.
-global PointerHidden := false, PointerX := 0, PointerY := 0, PointerLastMove := A_TickCount
+global PointerHidden := false, PointerX := 0, PointerY := 0
 global ParkX := 0, ParkY := 0
 
 SetBlankCursors() {
@@ -253,27 +255,59 @@ HidePointer() {
     PointerHidden := true
 }
 
+; Only real touchpad use counts (A_TimeIdleMouse ignores input made by programs), so nothing but the touchpad
+; brings the pointer back.
 CheckPointer() {
-    global PointerHidden, PointerLastMove
-    static lastX := -1, lastY := -1
-    CoordMode("Mouse", "Screen")
-    MouseGetPos(&x, &y)
+    global PointerHidden
+    touched := A_TimeIdleMouse < 200
     if PointerHidden {
-        if (x != ParkX || y != ParkY) {          ; touched: put it back where it was, plus the movement
-            DllCall("SetCursorPos", "Int", PointerX + (x - ParkX), "Int", PointerY + (y - ParkY))
+        if touched {
+            CoordMode("Mouse", "Screen")
+            MouseGetPos(&x, &y)
+            if (Abs(x - ParkX) < 400 && Abs(y - ParkY) < 400)   ; still parked: back to where it was
+                DllCall("SetCursorPos", "Int", PointerX + (x - ParkX), "Int", PointerY + (y - ParkY))
             RestoreCursors()
             PointerHidden := false
-            PointerLastMove := A_TickCount
-            MouseGetPos(&x, &y)
         }
-    } else if (x != lastX || y != lastY) {
-        PointerLastMove := A_TickCount
-    } else if (A_TickCount - PointerLastMove > 3000) {
+    } else if (A_TimeIdleMouse > 3000) {
         HidePointer()
-        MouseGetPos(&x, &y)
     }
-    lastX := x, lastY := y
 }
+
+; ---------- volume keys (TV only) ----------
+global VolGui := 0, VolBar := 0, VolText := 0
+VolumeKey(step, *) {
+    if (step = 0)
+        SoundSetMute(-1)
+    else {
+        if SoundGetMute()
+            SoundSetMute(false)
+        SoundSetVolume((step > 0 ? "+" : "") step)
+    }
+    ShowVolume()
+}
+ShowVolume() {
+    global VolGui, VolBar, VolText
+    if !VolGui {
+        VolGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")   ; click-through, never takes focus
+        VolGui.BackColor := "0F1A2E"
+        VolGui.MarginX := 28, VolGui.MarginY := 18
+        VolGui.SetFont("s16 cF6F7F0 w600", "Segoe UI")
+        VolText := VolGui.Add("Text", "w420 Center", "")
+        VolBar := VolGui.Add("Progress", "w420 h10 y+12 c5B8CFF Background2A3550 Range0-100", 0)
+        VolGui.Show("Hide AutoSize")
+        WinGetPos(, , &w, &h, VolGui.Hwnd)
+        DllCall("SetWindowRgn", "Ptr", VolGui.Hwnd, "Ptr", DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", w + 1, "Int", h + 1, "Int", 28, "Int", 28, "Ptr"), "Int", true)
+        WinSetTransparent(235, VolGui.Hwnd)
+    }
+    muted := SoundGetMute(), level := Round(SoundGetVolume())
+    VolText.Value := muted ? "Muted" : "Volume " level
+    VolBar.Value := muted ? 0 : level
+    WinGetPos(, , &w, &h, VolGui.Hwnd)
+    VolGui.Show("NA x" (A_ScreenWidth - w) // 2 " y" Round(A_ScreenHeight * 0.82))
+    SetTimer(HideVolume, -1600)
+}
+HideVolume() => VolGui && VolGui.Hide()
 
 ; ---------- key feed for the key-test page ----------
 OnKeyDown(ih, vk, sc) {
@@ -313,6 +347,14 @@ ih.OnKeyDown := OnKeyDown
 ih.Start()
 
 if !Windowed {
+    InstallMouseHook()                  ; needed for A_TimeIdleMouse
     OnExit(RestoreCursors)
     SetTimer(CheckPointer, 150)
+    ; Volume keys: only on the TV (on a normal PC, Windows' own volume keys and display stay in charge).
+    for k in JsonArray(km, "global", "volumeUp")
+        try Hotkey("$" k, VolumeKey.Bind(2))
+    for k in JsonArray(km, "global", "volumeDown")
+        try Hotkey("$" k, VolumeKey.Bind(-2))
+    for k in JsonArray(km, "global", "mute")
+        try Hotkey("$" k, VolumeKey.Bind(0))
 }
