@@ -16,13 +16,25 @@ html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
 body{transition:background 4s ease}
 
 /* ---------- dynamic wallpaper ---------- */
+/* Each blob is a soft radial gradient shaped like the design's blur(90px) circle. A live blur filter was redrawn
+   every frame while the blobs drift (8 fps on the TV PC's Intel HD 4400); a gradient is drawn once and then only
+   moved. The palette colours are registered so the 4 s crossfade between time slots still animates. */
+@property --b1{syntax:'<color>';inherits:true;initial-value:#1f4d8f}
+@property --b2{syntax:'<color>';inherits:true;initial-value:#163a6e}
+@property --b3{syntax:'<color>';inherits:true;initial-value:#2c62a8}
+@property --b4{syntax:'<color>';inherits:true;initial-value:#0f2a52}
+:root{transition:--b1 4s ease,--b2 4s ease,--b3 4s ease,--b4 4s ease}
 .wall{position:fixed;inset:0;overflow:hidden;z-index:0}
-.blob{position:absolute;width:60vmax;height:60vmax;border-radius:50%;filter:blur(90px);opacity:.55;
-  transition:background 4s ease;will-change:transform}
-.blob.a{background:var(--b1);top:-20vmax;left:-15vmax;animation:da 38s ease-in-out infinite alternate}
-.blob.b{background:var(--b2);bottom:-25vmax;right:-10vmax;animation:db 44s ease-in-out infinite alternate}
-.blob.c{background:var(--b3);top:20vh;left:35vw;width:40vmax;height:40vmax;opacity:.4;animation:dc 52s ease-in-out infinite alternate}
-.blob.d{background:var(--b4);bottom:-10vmax;left:-10vmax;width:45vmax;height:45vmax;animation:dd 47s ease-in-out infinite alternate}
+.blob{position:absolute;width:60vmax;height:60vmax;opacity:.55;will-change:transform}
+.blob::before{content:"";position:absolute;inset:-15%;
+  background:radial-gradient(closest-side,var(--c) 0%,color-mix(in srgb,var(--c) 98%,transparent) 53%,
+    color-mix(in srgb,var(--c) 84%,transparent) 65%,color-mix(in srgb,var(--c) 50%,transparent) 77%,
+    color-mix(in srgb,var(--c) 16%,transparent) 89%,transparent 100%)}
+.blob.a{--c:var(--b1)}.blob.b{--c:var(--b2)}.blob.c{--c:var(--b3)}.blob.d{--c:var(--b4)}
+.blob.a{top:-20vmax;left:-15vmax;animation:da 38s ease-in-out infinite alternate}
+.blob.b{bottom:-25vmax;right:-10vmax;animation:db 44s ease-in-out infinite alternate}
+.blob.c{top:20vh;left:35vw;width:40vmax;height:40vmax;opacity:.4;animation:dc 52s ease-in-out infinite alternate}
+.blob.d{bottom:-10vmax;left:-10vmax;width:45vmax;height:45vmax;animation:dd 47s ease-in-out infinite alternate}
 @keyframes da{to{transform:translate(18vw,14vh) scale(1.15)}}
 @keyframes db{to{transform:translate(-22vw,-10vh) scale(.9)}}
 @keyframes dc{to{transform:translate(-20vw,18vh) scale(1.25)}}
@@ -42,7 +54,6 @@ body{transition:background 4s ease}
 .status{display:flex;gap:calc(var(--u)*1);align-items:center}
 .pill{display:flex;align-items:center;gap:calc(var(--u)*.6);padding:calc(var(--u)*.7) calc(var(--u)*1.3);
   border-radius:999px;background:var(--glass);border:1px solid var(--line);
-  backdrop-filter:blur(20px) saturate(150%);-webkit-backdrop-filter:blur(20px) saturate(150%);
   font-size:calc(var(--u)*1.25);color:var(--dim)}
 .pill svg{width:calc(var(--u)*1.5);height:calc(var(--u)*1.5)}
 
@@ -55,16 +66,20 @@ body{transition:background 4s ease}
 .rows .row.big + .label{margin-top:calc(var(--u)*3)}
 
 /* ---------- glass tiles ---------- */
-.tile{position:relative;overflow:hidden;border-radius:calc(var(--u)*1.8);
-  background:var(--glass);border:1px solid var(--line);
-  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);
+/* No backdrop blur: the wallpaper behind is already soft, so the blur hardly showed but was redone every frame.
+   The focus glow sits on ::after and fades in (cheap) instead of animating a large box-shadow (repainted per frame). */
+.tile{position:relative;isolation:isolate;border-radius:calc(var(--u)*1.8);
+  background-color:var(--glass);border:1px solid var(--line);
+  background-image:linear-gradient(160deg,rgba(255,255,255,.18) 0%,transparent 35%);
   display:flex;flex-direction:column;justify-content:space-between;
-  transition:transform .28s cubic-bezier(.2,.9,.3,1.2),box-shadow .28s ease,border-color .28s ease,background .28s ease;
+  transition:transform .28s cubic-bezier(.2,.9,.3,1.2),border-color .28s ease,background-color .28s ease,opacity .3s ease;
   outline:none}
-.tile::before{content:"";position:absolute;inset:0;z-index:-1;
+.tile::before{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;
   background:radial-gradient(120% 90% at 0% 100%,var(--accent) 0%,transparent 60%);opacity:.35;transition:opacity .28s ease}
-.tile::after{content:"";position:absolute;inset:0;border-radius:inherit;pointer-events:none;
-  background:linear-gradient(160deg,rgba(255,255,255,.18) 0%,transparent 35%)}
+.tile::after{content:"";position:absolute;inset:0;z-index:-1;border-radius:inherit;pointer-events:none;opacity:0;
+  box-shadow:0 calc(var(--u)*2.2) calc(var(--u)*5) calc(var(--u)*-1) var(--accent),0 0 0 calc(var(--u)*.25) rgba(255,255,255,.25);
+  transition:opacity .28s ease}
+.tile.focus::after{opacity:1}
 .big .tile{height:calc(var(--u)*14);padding:calc(var(--u)*1.6)}
 .small .tile{flex-direction:row;align-items:center;justify-content:flex-start;gap:calc(var(--u)*1.2);
   height:calc(var(--u)*4.4);padding:0 calc(var(--u)*1.2);border-radius:calc(var(--u)*1.2)}
@@ -85,9 +100,8 @@ body{transition:background 4s ease}
 .icon.img.pad img{width:72%;height:72%}
 .name{font-size:calc(var(--u)*1.65);font-weight:650;letter-spacing:-.02em}
 .sub{font-size:calc(var(--u)*1.05);color:var(--dim);margin-top:calc(var(--u)*.3)}
-.tile.focus{transform:scale(1.08) translateY(calc(var(--u)*-.6));background:var(--glass-hi);
-  border-color:rgba(255,255,255,.55);
-  box-shadow:0 calc(var(--u)*2.2) calc(var(--u)*5) calc(var(--u)*-1) var(--accent),0 0 0 calc(var(--u)*.25) rgba(255,255,255,.25)}
+.tile.focus{transform:scale(1.08) translateY(calc(var(--u)*-.6));background-color:var(--glass-hi);
+  border-color:rgba(255,255,255,.55)}
 .tile.focus::before{opacity:.9}
 .small .tile.focus{transform:scale(1.05)}
 
@@ -114,9 +128,12 @@ body{transition:background 4s ease}
 
 /* ---------- lite mode (for weak GPUs) ---------- */
 body.lite .blob{animation:none}
-body.lite .tile,body.lite .pill,body.lite .launch{backdrop-filter:none;-webkit-backdrop-filter:none}
-body.lite .tile{background:rgba(30,30,50,.72)}
-body.lite .tile.focus{background:rgba(55,55,85,.85)}
+body.lite .launch{backdrop-filter:none;-webkit-backdrop-filter:none}
+body.lite .tile{background-color:rgba(30,30,50,.72)}
+body.lite .tile.focus{background-color:rgba(55,55,85,.85)}
+/* Full-screen blurs (launch overlay, dialogs) stay, but the wallpaper holds still under them so the blur is not
+   recalculated every frame. */
+body:has(.launch.show) .blob,body:has(.modal.show) .blob{animation-play-state:paused}
 
 /* ---------- "Next Session" chip (Race Calendar, added in stage 4) ---------- */
 .race-chip{color:var(--text)}
@@ -131,14 +148,9 @@ body.lite .tile.focus{background:rgba(55,55,85,.85)}
 body.pointer-idle,body.pointer-idle *{cursor:none!important}
 
 /* ---------- a big row with more than 6 tiles slides sideways with the focus (js/home.js) ---------- */
-/* The padding gives the focused tile room to grow and glow; the negative margin keeps the approved layout. */
-.row-view{overflow:hidden;padding:calc(var(--u)*2.4) calc(var(--u)*1.8);margin:calc(var(--u)*-2.4) calc(var(--u)*-1.8);
-  -webkit-mask-image:linear-gradient(to right,var(--l,#000) 0,#000 calc(var(--u)*1.8),#000 calc(100% - var(--u)*1.8),var(--r,#000) 100%);
-          mask-image:linear-gradient(to right,var(--l,#000) 0,#000 calc(var(--u)*1.8),#000 calc(100% - var(--u)*1.8),var(--r,#000) 100%)}
-.row-view.more-left{--l:transparent}
-.row-view.more-right{--r:transparent}
+/* Nothing is clipped (clipping cut the focus glow off): tiles outside the 6 on screen fade out instead. */
 .row.big.slide{grid-template-columns:none;grid-auto-flow:column;
   grid-auto-columns:calc((100% - var(--u)*1.6*5) / 6);transition:transform .38s cubic-bezier(.2,.9,.3,1)}
-.rows .label + .row-view{margin-top:calc(var(--u)*-2.4)}
+.tile.off{opacity:0;pointer-events:none}
 .rows .row-view + .label{margin-top:calc(var(--u)*3)}
 body.lite .row.big.slide{transition:none}

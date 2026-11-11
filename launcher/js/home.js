@@ -120,8 +120,7 @@
       firstShown[r] = first;
       // Distance from the row's first tile (offsetLeft itself is measured from the screen's edge).
       el.style.transform = 'translateX(' + (grid[r][0].offsetLeft - grid[r][first].offsetLeft) + 'px)';
-      el.parentElement.classList.toggle('more-left', first > 0);
-      el.parentElement.classList.toggle('more-right', first + VISIBLE_BIG < grid[r].length);
+      grid[r].forEach((t, i) => t.classList.toggle('off', i < first || i >= first + VISIBLE_BIG));
     }
   }
 
@@ -208,14 +207,15 @@
   }
 
   /* ---------- clock (the wallpaper itself is js/wallpaper.js) ---------- */
+  // Only touch text that changed: rewriting the clock every second repainted its three-layer glass effect.
+  const setText = (id, s) => { const el = $(id); if (el.textContent !== s) el.textContent = s; };
   function tick() {
     const d = new Date();
-    $('clock').textContent = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' });
-    $('date').textContent = d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' });
+    setText('clock', d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' }));
+    setText('date', d.toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long' }));
     const part = TV.dayPart(d);
-    $('greet').textContent =
-      (part === 'morning' ? 'Good Morning' : part === 'day' ? 'Good Afternoon' : 'Good Evening') + ', Jazz & Tris';
-    $('net').textContent = navigator.onLine ? 'Online' : 'Offline';
+    setText('greet', (part === 'morning' ? 'Good Morning' : part === 'day' ? 'Good Afternoon' : 'Good Evening') + ', Jazz & Tris');
+    setText('net', navigator.onLine ? 'Online' : 'Offline');
   }
 
   /* ---------- screen off when idle (Settings > Screen Off When Idle; home screen only) ---------- */

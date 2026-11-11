@@ -19,13 +19,16 @@
 
 .srow{--accent:#5b8cff;position:relative;display:flex;align-items:center;justify-content:space-between;gap:calc(var(--u)*2);
   min-height:calc(var(--u)*6.2);padding:calc(var(--u)*1) calc(var(--u)*2);margin-bottom:calc(var(--u)*.9);
-  border-radius:calc(var(--u)*1.4);background:var(--glass);border:1px solid var(--line);
-  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);
-  transition:transform .22s cubic-bezier(.2,.9,.3,1.2),background .22s ease,border-color .22s ease,box-shadow .22s ease}
+  border-radius:calc(var(--u)*1.4);background:var(--glass);border:1px solid var(--line);isolation:isolate;
+  transition:transform .22s cubic-bezier(.2,.9,.3,1.2),background .22s ease,border-color .22s ease}
 .srow::before{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;opacity:0;transition:opacity .22s ease;
   background:radial-gradient(120% 140% at 0% 100%,var(--accent) 0%,transparent 55%)}
-.srow.focus{transform:scale(1.025);background:var(--glass-hi);border-color:rgba(255,255,255,.55);
+.srow.focus{transform:scale(1.025);background:var(--glass-hi);border-color:rgba(255,255,255,.55)}
+/* Focus glow fades in on its own layer (as .tile::after in launcher.css). */
+.srow::after{content:"";position:absolute;inset:0;border-radius:inherit;z-index:-1;pointer-events:none;opacity:0;transition:opacity .22s ease;
   box-shadow:0 calc(var(--u)*1.2) calc(var(--u)*3.5) calc(var(--u)*-1) var(--accent),0 0 0 calc(var(--u)*.2) rgba(255,255,255,.22)}
+.srow.focus::after{opacity:1}
+.srow.info::after{display:none}
 .srow.focus::before{opacity:.45}
 .srow .txt{display:flex;flex-direction:column;min-width:0}
 .srow .name{font-size:calc(var(--u)*1.5);font-weight:600;letter-spacing:-.015em;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
@@ -34,7 +37,7 @@
 .srow.focus .ctl{color:var(--text)}
 .srow .go{font-size:calc(var(--u)*1.2);color:var(--dim)}
 .srow.focus .go{color:var(--text)}
-.srow.info{background:transparent;border-color:transparent;backdrop-filter:none;-webkit-backdrop-filter:none;min-height:calc(var(--u)*4.4)}
+.srow.info{background:transparent;border-color:transparent;min-height:calc(var(--u)*4.4)}
 .srow.info.focus{background:var(--glass);border-color:var(--line);box-shadow:none;transform:none}
 
 /* segmented choice: Left / Right moves it */
@@ -93,7 +96,7 @@
 .power-row .name{font-size:calc(var(--u)*2)}
 .power-row .sub{font-size:calc(var(--u)*1.15)}
 
-body.lite .srow,body.lite .modal{backdrop-filter:none;-webkit-backdrop-filter:none}
+body.lite .modal{backdrop-filter:none;-webkit-backdrop-filter:none}
 body.lite .srow{background:rgba(30,30,50,.72)}
 body.lite .srow.focus{background:rgba(55,55,85,.85)}
 body.lite .modal{background:rgba(5,8,18,.88)}
@@ -106,8 +109,7 @@ body.lite .modal{background:rgba(5,8,18,.88)}
 .hero{--accent:#e10600;position:relative;overflow:hidden;width:calc(var(--u)*92);max-width:100%;margin:calc(var(--u)*2) auto 0;
   display:flex;align-items:center;justify-content:space-between;gap:calc(var(--u)*3);
   padding:calc(var(--u)*1.8) calc(var(--u)*2.8);border-radius:calc(var(--u)*2);
-  background:var(--glass-hi);border:1px solid rgba(255,255,255,.3);
-  backdrop-filter:blur(26px) saturate(160%);-webkit-backdrop-filter:blur(26px) saturate(160%);
+  background:var(--glass-hi);border:1px solid rgba(255,255,255,.3);isolation:isolate;
   box-shadow:0 calc(var(--u)*2) calc(var(--u)*5) calc(var(--u)*-1.6) var(--accent)}
 .hero::before{content:"";position:absolute;inset:0;z-index:-1;opacity:.5;
   background:radial-gradient(90% 160% at 0% 100%,var(--accent) 0%,transparent 60%)}
@@ -142,7 +144,7 @@ body.lite .modal{background:rgba(5,8,18,.88)}
 .srow.race.is-live{border-color:rgba(255,107,129,.5)}
 .empty-note{text-align:center;color:var(--dim);font-size:calc(var(--u)*1.3);margin-top:calc(var(--u)*4)}
 
-body.lite .hero{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(40,40,64,.85)}
+body.lite .hero{background:rgba(40,40,64,.85)}
 body.lite .live::before{animation:none}
 
 /* ---------- network speed test (Settings) ---------- */
