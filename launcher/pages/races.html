@@ -177,8 +177,8 @@
       w.append(el('b', null, isLive(s, now) ? 'Live' : s.timeKnown ? time(s.start) : 'TBC'), el('span', null, shortDay(s.start)));
       r.append(el('span', 'sbadge', s.series), txt, w);
       const i = rows.length;
-      // mousemove, not mouseenter: scrolling moves rows under a resting pointer, which must not steal the focus.
-      r.addEventListener('mousemove', () => { if (focused !== i) focus(i, false); });
+      // TV.onHover: scrolling moves rows under a resting pointer, which must not steal the focus.
+      TV.onHover(r, () => { if (focused !== i) focus(i, false); });
       list.appendChild(r);
       rows.push(r);
     });

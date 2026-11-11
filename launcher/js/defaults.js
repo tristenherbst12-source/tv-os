@@ -4,7 +4,7 @@ window.TV_DEFAULTS = {
   "version": 1,
   "rows": [
     { "id": "watch", "label": "Watch and Listen", "size": "big",
-      "apps": ["youtube", "netflix", "prime", "disney", "f1tv", "spotify"] },
+      "apps": ["youtube", "netflix", "prime", "disney", "dstv", "f1tv", "twitch", "spotify"] },
     { "id": "more", "label": "More", "size": "small",
       "apps": ["browser", "races", "settings", "power"] }
   ],
@@ -17,32 +17,44 @@ window.TV_DEFAULTS = {
     },
     "netflix": {
       "name": "Netflix", "sub": "Series and Films", "accent": "#d81f26", "glyph": "film",
-      "icon": "icons/netflix.png", "iconBg": "#000000",
-      "launch": { "type": "store", "package": "4DF9E0F8.Netflix", "aumid": null },
+      "icon": "icons/netflix.png", "iconBg": "#000000", "iconPackage": "4DF9E0F8.Netflix",
+      "launch": { "type": "edge-app", "url": "https://www.netflix.com/browse", "profile": "netflix", "scale": 1.25 },
       "onHome": "close"
     },
     "prime": {
       "name": "Prime Video", "sub": "Series and Films", "accent": "#1aa3ff", "glyph": "tv",
-      "icon": "icons/prime.png", "iconBg": null,
-      "launch": { "type": "store", "package": "AmazonVideo.PrimeVideo", "aumid": null },
+      "icon": "icons/prime.png", "iconBg": null, "iconPackage": "AmazonVideo.PrimeVideo",
+      "launch": { "type": "edge-app", "url": "https://www.primevideo.com/", "profile": "prime", "scale": 1.25 },
       "onHome": "close"
     },
     "disney": {
       "name": "Disney+", "sub": "Series and Films", "accent": "#4b5cff", "glyph": "star",
-      "icon": "icons/disney.png", "iconBg": null,
-      "launch": { "type": "store", "package": "Disney.37853FC22B2CE", "aumid": null },
+      "icon": "icons/disney.png", "iconBg": null, "iconPackage": "Disney.37853FC22B2CE",
+      "launch": { "type": "edge-app", "url": "https://www.disneyplus.com/", "profile": "disney", "scale": 1.25 },
+      "onHome": "close"
+    },
+    "dstv": {
+      "name": "DStv", "sub": "Live TV and Catch Up", "accent": "#1f6fd6", "glyph": "tv",
+      "icon": null, "iconBg": null, "_iconNote": "dstv.stream only has a small plain-cyan favicon, so the tile uses its glyph. Put a PNG at icons/dstv.png and set icon to use one.",
+      "launch": { "type": "edge-app", "url": "https://dstv.stream/", "profile": "dstv", "scale": 1.25 },
       "onHome": "close"
     },
     "f1tv": {
       "name": "F1TV", "sub": "Live and Replays", "accent": "#ff6a1a", "glyph": "flag",
       "icon": "icons/f1tv.png", "iconBg": null,
-      "launch": { "type": "edge-app", "url": "https://f1tv.formula1.com", "profile": "f1tv" },
+      "launch": { "type": "edge-app", "url": "https://f1tv.formula1.com", "profile": "f1tv", "scale": 1.25 },
+      "onHome": "close"
+    },
+    "twitch": {
+      "name": "Twitch", "sub": "Live Streams", "accent": "#9146ff", "glyph": "play",
+      "icon": "icons/twitch.png", "iconBg": null,
+      "launch": { "type": "edge-app", "url": "https://www.twitch.tv/", "profile": "twitch", "scale": 1.25 },
       "onHome": "close"
     },
     "spotify": {
       "name": "Spotify", "sub": "Music", "accent": "#1ed760", "glyph": "music",
-      "icon": "icons/spotify.png", "iconBg": "#000000",
-      "launch": { "type": "store", "package": "SpotifyAB.SpotifyMusic", "aumid": null, "exeFallback": "%APPDATA%\\Spotify\\Spotify.exe" },
+      "icon": "icons/spotify.png", "iconBg": "#000000", "iconPackage": "SpotifyAB.SpotifyMusic",
+      "launch": { "type": "edge-app", "url": "https://open.spotify.com/", "profile": "spotify", "scale": 1.25 },
       "onHome": "minimize"
     },
     "browser": {
@@ -71,11 +83,13 @@ window.TV_DEFAULTS = {
   },
   "_notes": [
     "icon: path relative to launcher/. Filled by scripts/extract-icons.ps1 (stage 5). If the file is missing, the tile shows its glyph.",
+    "iconPackage: Store app whose logo is used for a website tile when that app is installed (else the site icon).",
     "iconBg: plate colour behind the icon (Store manifest BackgroundColor). null = use accent; 'transparent' = no plate.",
-    "store.package: package Name used to find the app with Get-AppxPackage. aumid is resolved at setup time (PackageFamilyName!AppId).",
+    "store.package: package Name used to find the app with Get-AppxPackage (only winsettings uses this now).",
+    "Netflix, Prime Video, Disney+ and Spotify open as their websites in TV windows (decided 11 Nov 2026): their Store apps are Edge web apps anyway, and only our own windows can be full screen and get remote navigation (extensions/tvnav).",
     "hidden: not a tile (only listed so Home knows what to do with it). winsettings = the Windows Settings pages opened from Settings > Wi-Fi / Bluetooth.",
     "onHome: what the Home button does to this app. close = end it, minimize = keep running (Spotify keeps playing). Browser closes because opening it again would add a second window.",
-    "edge / edge-app: each gets its own Edge profile (profile name) under %LOCALAPPDATA%/TVLauncher/profiles, so logins stick. edge-app opens full screen without browser bars.",
+    "edge / edge-app: each gets its own Edge profile (profile name) under %LOCALAPPDATA%/TVLauncher/profiles, so logins stick. edge-app opens full screen without browser bars. Every TV window loads extensions/tvnav (arrows, OK and Back drive the site). Opening a tile whose window is still open (Spotify) brings that window back.",
     "scale: makes everything in that one window bigger for viewing from the couch (1.5 = 150%). It only affects the window the tile opens: it runs as its own Edge process with its own profile.",
     "userAgent (optional): pretend to be another browser in that window. Not used: youtube.com/tv cannot be reached from a desktop browser (see docs/build-notes.md).",
     "forceH264 loads extensions/h264only (Haswell cannot decode VP9 in hardware)."
@@ -90,18 +104,23 @@ window.TV_DEFAULTS = {
     "right": ["ArrowRight"],
     "ok":    ["Enter", "NumpadEnter", " "],
     "back":  ["Escape", "Backspace", "BrowserBack"],
-    "home":  ["BrowserHome"],
+    "home":  ["BrowserHome", "F24"],
     "lite":  ["l", "L"]
   },
   "global": {
     "home":        ["Browser_Home"],
-    "back":        ["Browser_Back"],
+    "back":        ["Backspace", "Browser_Back"],
+    "block":       ["Browser_Search"],
     "escapeHatch": ["^!+d"]
   },
   "_notes": [
     "launcher: browser KeyboardEvent values. Each entry matches either e.key or e.code (e.g. 'Enter' or 'NumpadEnter').",
-    "global: AutoHotkey v2 key names, used by hotkeys/tv.ahk (stage 2) while another app is in front.",
-    "The remote model is not final. Open launcher/pages/keytest.html, press every button, and copy the values in here."
+    "global: AutoHotkey v2 key names, used by hotkeys/tv.ahk.",
+    "home: always caught by tv.ahk. In an app it goes home; on the launcher it is turned into F24, because Edge itself would open its own home page on Browser_Home.",
+    "back: a tap goes to the app (the TV windows turn it into 'back'); holding it 0.8 s goes home.",
+    "block: swallowed, so Windows does not act on them (the remote's search button opens a Bing search otherwise).",
+    "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; volume and media keys are left to Windows.",
+    "To check another remote: Settings > Remote Button Test."
   ]
 },
   "settings": {

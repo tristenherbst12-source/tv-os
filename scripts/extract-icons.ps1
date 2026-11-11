@@ -16,6 +16,8 @@ $root = Split-Path -Parent $PSScriptRoot
 $launcher = Join-Path $root 'launcher'
 $apps = (Get-Content -Raw -Encoding UTF8 (Join-Path $root 'config\apps.json') | ConvertFrom-Json).apps
 [Net.ServicePointManager]::SecurityProtocol = [Net.SecurityProtocolType]::Tls12
+# Some sites (Netflix) only answer browsers quickly.
+$UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130.0.0.0 Safari/537.36 Edg/130.0.0.0'
 
 function Get-ImageSize([string]$path) {
     try { $img = [Drawing.Image]::FromFile($path); try { return $img.Width } finally { $img.Dispose() } } catch { return 0 }
@@ -52,7 +54,7 @@ function Find-StoreIcon([string]$packageName) {
 
 # ---------- websites ----------
 function Get-WebIconCandidates([string]$url) {
-    $page = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20
+    $page = Invoke-WebRequest -Uri $url -UseBasicParsing -TimeoutSec 20 -UserAgent $UA
     $base = [Uri]$page.BaseResponse.ResponseUri
     $list = New-Object Collections.ArrayList
     foreach ($m in [regex]::Matches($page.Content, '<link\b[^>]*>', 'IgnoreCase')) {
@@ -63,7 +65,7 @@ function Get-WebIconCandidates([string]$url) {
         $sizes = [regex]::Match($tag, 'sizes\s*=\s*["''](\d+)x', 'IgnoreCase').Groups[1].Value
         if ($rel -match 'manifest') {
             try {
-                $man = Invoke-RestMethod -Uri ([Uri]::new($base, $href)) -TimeoutSec 20
+                $man = Invoke-RestMethod -Uri ([Uri]::new($base, $href)) -TimeoutSec 20 -UserAgent $UA
                 foreach ($i in @($man.icons)) {
                     if ($i.purpose -match 'monochrome') { continue }      # single-colour silhouette, not the real icon
                     $s =if ($i.sizes -match '^(\d+)x') { [int]$Matches[1] } else { 0 }
@@ -86,7 +88,7 @@ function Find-WebIcon([string]$url) {
     foreach ($c in $candidates) {
         $tmp = [IO.Path]::GetTempFileName()
         try {
-            Invoke-WebRequest -Uri $c.url -OutFile $tmp -UseBasicParsing -TimeoutSec 20
+            Invoke-WebRequest -Uri $c.url -OutFile $tmp -UseBasicParsing -TimeoutSec 20 -UserAgent $UA
             $w = Get-ImageSize $tmp
             if ($w -ge 64) { return @{ source = $c.url; size = $w; temp = $tmp } }
         } catch { }
@@ -155,13 +157,20 @@ $results = foreach ($id in $apps.PSObject.Properties.Name) {
     $type = $a.launch.type
     $found = switch ($type) {
         'store'    { Find-StoreIcon $a.launch.package }
-        'edge-app' { Find-WebIcon $a.launch.url }
+        'edge-app' {
+            # A website that also has a Store app (Netflix, Prime Video, ...): the Store app's logo when it is
+            # installed, otherwise the website's own icon.
+            $f = if ($a.iconPackage) { Find-StoreIcon $a.iconPackage } else { $null }
+            if (-not $f -or $f.error) { $f = Find-WebIcon $a.launch.url }
+            $f
+        }
         'edge'     { Find-EdgeIcon }
         default    { $null }
     }
     if (-not $found) { continue }
     $target = Join-Path $launcher ($a.icon -replace '/', '\')
-    $status = if ($found.error) { "kept glyph: $($found.error)" }
+    $status = if ($found.error -and (Test-Path $target)) { "kept the icon already there ($($found.error))" }
+              elseif ($found.error) { "kept glyph: $($found.error)" }
               elseif ($DryRun) { "would copy ($($found.size) px)" }
               else {
                   $src = if ($found.temp) { $found.temp } else { $found.source }

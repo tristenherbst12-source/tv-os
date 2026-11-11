@@ -31,7 +31,7 @@
     r.append(txt, ctl);
     const item = Object.assign({ el: r, nameEl: name, hintEl: hint, ctlEl: ctl }, o);
     item.setHint = t => { hint.textContent = t || ''; hint.hidden = !t; };
-    r.addEventListener('mouseenter', () => focus(rows.indexOf(item)));
+    TV.onHover(r, () => focus(rows.indexOf(item)));
     r.addEventListener('click', () => { focus(rows.indexOf(item)); item.ok && item.ok(); });
     (o.before ? list.insertBefore(r, o.before) : list.appendChild(r));
     const at = o.index != null ? o.index : rows.length;
@@ -198,6 +198,55 @@
     } catch (e) { TV.ui.toast(e.status === 403 ? 'Wrong PIN' : 'Could Not Open the Desktop'); }
   }
 
+  /* ---------- network speed test (js/speedtest.js) ---------- */
+  async function runSpeedTest() {
+    if (!navigator.onLine) { TV.ui.toast('No Internet Connection'); return; }
+    const d = TV.ui.live({ title: 'Network Speed Test' });
+    const grid = el('div', 'speed');
+    const cells = {};
+    [['ping', 'Ping', 'ms'], ['down', 'Download', 'Mbit/s'], ['up', 'Upload', 'Mbit/s']].forEach(([k, label, unit]) => {
+      const c = el('div', 'speed-cell');
+      const v = el('div', 'speed-val', '–');
+      c.append(v, el('div', 'speed-label', label), el('div', 'speed-unit', unit));
+      grid.appendChild(c);
+      cells[k] = { c, v };
+    });
+    const status = el('div', 'dialog-text', '');
+    d.body.append(grid, status);
+    const ctrl = new AbortController();
+    d.closed.then(() => ctrl.abort());
+    const fmt = n => n >= 100 ? String(Math.round(n)) : n.toFixed(1);
+    const show = (k, text, active) => { cells[k].v.textContent = text; cells[k].c.classList.toggle('active', !!active); };
+    const verdict = mbps => mbps >= 25 ? 'Fast Enough for 4K Streaming' : mbps >= 10 ? 'Fine for HD Streaming'
+      : mbps >= 5 ? 'Enough for Standard Quality' : 'Streams May Buffer at This Speed';
+
+    for (;;) {
+      ['ping', 'down', 'up'].forEach(k => show(k, '–', false));
+      status.textContent = 'Measuring… Press Back to Stop';
+      try {
+        const r = await TV.speedTest.run(p => {
+          if (p.phase === 'ping') { show('ping', '…', true); status.textContent = 'Checking the Response Time…'; }
+          if (p.pingMs != null) show('ping', String(Math.round(p.pingMs)), false);
+          if (p.phase === 'download') { show('down', fmt(p.mbps), true); status.textContent = 'Testing the Download Speed…'; }
+          if (p.phase === 'upload') {
+            show('down', fmt(p.downMbps), false); show('up', fmt(p.mbps), true);
+            status.textContent = 'Testing the Upload Speed…';
+          }
+        }, ctrl.signal);
+        show('ping', String(Math.round(r.pingMs)), false); show('down', fmt(r.downMbps), false); show('up', fmt(r.upMbps), false);
+        status.textContent = verdict(r.downMbps);
+      } catch (e) {
+        if (ctrl.signal.aborted) return;
+        console.warn('speed test failed', e);
+        ['ping', 'down', 'up'].forEach(k => cells[k].c.classList.remove('active'));
+        status.textContent = 'The Test Could Not Finish. Check the Internet Connection.';
+      }
+      const again = await d.setButtons([{ label: 'Done', value: false }, { label: 'Run Again', value: true }]);
+      if (!again) { d.close(); return; }
+      d.setButtons([]);
+    }
+  }
+
   let pinItem;
   async function changePin() {
     if (!needHelper()) return;
@@ -265,6 +314,9 @@
       ok: () => needHelper() && H.request('/open-settings/wifi', { method: 'POST' }).catch(() => TV.ui.toast('Could Not Open Wi-Fi Settings')) });
     const bt = goRow({ name: 'Bluetooth', hint: 'Pair Headphones or a Soundbar', accent: '#14c3b4',
       ok: () => needHelper() && H.request('/open-settings/bluetooth', { method: 'POST' }).catch(() => TV.ui.toast('Could Not Open Bluetooth Settings')) });
+
+    goRow({ name: 'Network Speed Test', hint: 'Checks the Download and Upload Speed', accent: '#14c3b4',
+      ctl: el('span', 'go', 'Start ›'), ok: runSpeedTest });
 
     group('System');
     goRow({ name: 'Restart Launcher', hint: 'Reloads This Home Screen', accent: '#8a8fb3', ctl: el('span', 'go', 'Restart ›'),

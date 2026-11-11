@@ -164,25 +164,37 @@ if (Want 'autologin') {
         Write-Warn "$($user.Name) is a Microsoft account. Automatic sign-in is set up here for local accounts only."
         Write-Info 'Use a local account for the TV (README, step 1), or set it up with Sysinternals Autologon.'
     } else {
-        Set-Reg $WinlogonKey 'AutoAdminLogon' '1' 'String'
-        Set-Reg $WinlogonKey 'DefaultUserName' $user.Name 'String'
-        Set-Reg $WinlogonKey 'DefaultDomainName' $env:COMPUTERNAME 'String'
-        Remove-RegValue $WinlogonKey 'DefaultPassword'      # a plain-text copy, if anything ever left one
-        Set-Reg "$HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device" 'DevicePasswordLessBuildVersion' 0
-        if (-not $user.HasPassword) {
-            Write-Ok "$($user.Name) has no password, so none is stored"
-        } elseif ($Apply) {
-            $stored = $false
-            for ($i = 1; $i -le 3 -and -not $stored; $i++) {
-                $pw = Read-Host "Windows password for $($user.Name) (stored encrypted by Windows, used only to sign in)" -AsSecureString
-                if (Test-LocalPassword $user.Name $pw) {
+        # The password is always asked for (Windows' "password required" flag is often off even when the account
+        # has one, which is why an earlier version skipped the question). Automatic sign-in is only switched on
+        # once a password is known to be right, so a wrong one never leaves the PC stuck at "invalid password".
+        $ready = $false
+        if ($Apply) {
+            $have = [TVSetup.Lsa]::HasDefaultPassword()
+            $blankHint = if ($have) { 'press Enter to keep the one already stored' } else { 'press Enter if the account has no password' }
+            for ($i = 1; $i -le 3 -and -not $ready; $i++) {
+                $pw = Read-Host "Windows password for $($user.Name) ($blankHint)" -AsSecureString
+                if ($pw.Length -eq 0) {
+                    if ($have) { Write-Ok 'keeping the stored password'; $ready = $true }
+                    elseif ((Read-Host "Does $($user.Name) sign in with no password at all? (y/n)") -match '^y') {
+                        Write-Info 'no password stored'; $ready = $true
+                    }
+                } elseif (Test-LocalPassword $user.Name $pw) {
                     Invoke-Change 'store the password as a Windows secret (LSA), the way Sysinternals Autologon does' { [TVSetup.Lsa]::SetDefaultPassword($pw) }.GetNewClosure()
-                    $stored = $true
+                    $ready = $true
                 } else { Write-Warn 'That password is not right. Try again.' }
             }
-            if (-not $stored) { Write-Warn 'No password stored: automatic sign-in will stop at the sign-in screen.' }
         } else {
             Write-Change "ask for $($user.Name)'s password, check it, and store it encrypted (LSA secret, never plain text)"
+            $ready = $true
+        }
+        if ($ready) {
+            Set-Reg $WinlogonKey 'AutoAdminLogon' '1' 'String'
+            Set-Reg $WinlogonKey 'DefaultUserName' $user.Name 'String'
+            Set-Reg $WinlogonKey 'DefaultDomainName' $env:COMPUTERNAME 'String'
+            Remove-RegValue $WinlogonKey 'DefaultPassword'      # a plain-text copy, if anything ever left one
+            Set-Reg "$HKLM\SOFTWARE\Microsoft\Windows NT\CurrentVersion\PasswordLess\Device" 'DevicePasswordLessBuildVersion' 0
+        } else {
+            Write-Warn 'No correct password given, so automatic sign-in was NOT switched on. Run setup again to retry.'
         }
     }
 }
@@ -209,20 +221,21 @@ if (Want 'install') {
     } else { Write-Warn 'AutoHotkey v2 is missing and winget is not available: install it from autohotkey.com.' }
 }
 
-Write-Section '9. Apps (installed and signed in by hand)'
+Write-Section '9. Apps'
 if (Want 'apps') {
     foreach ($id in $apps.PSObject.Properties.Name) {
         $a = $apps.$id
-        if ($a.launch.type -ne 'store' -or $a.hidden) { continue }
-        $p = if ((Test-Admin) -and -not $user.IsCurrent) { @(Get-AppxPackage -Name $a.launch.package -User $user.Name)[0] } else { @(Get-AppxPackage -Name $a.launch.package)[0] }
-        if ($p) {
-            $appId = @(([xml](Get-Content -Raw (Join-Path $p.InstallLocation 'AppxManifest.xml'))).Package.Applications.Application)[0].Id
-            Write-Ok "$($a.name): $($p.PackageFamilyName)!$appId"
-        } elseif ($a.launch.exeFallback -and (Test-Path ([Environment]::ExpandEnvironmentVariables($a.launch.exeFallback)))) {
-            Write-Ok "$($a.name): desktop version"
-        } else { Write-Warn "$($a.name) is not installed: get it from the Microsoft Store and sign in." }
+        if ($a.hidden) { continue }
+        switch ($a.launch.type) {
+            'edge-app' { Write-Ok "$($a.name): website in a TV window ($($a.launch.url)); sign in once from the home screen" }
+            'store' {
+                $p = if ((Test-Admin) -and -not $user.IsCurrent) { @(Get-AppxPackage -Name $a.launch.package -User $user.Name)[0] } else { @(Get-AppxPackage -Name $a.launch.package)[0] }
+                if ($p) { Write-Ok "$($a.name): Store app installed" }
+                else { Write-Warn "$($a.name) is not installed: get it from the Microsoft Store." }
+            }
+        }
     }
-    Write-Info 'The helper finds each app by its package name when it starts it, so nothing needs writing into apps.json.'
+    Write-Info 'No Store apps are needed: every streaming tile opens its website. (Installed Store apps only lend their icons.)'
 }
 
 # ---------- 10. Icons ----------
@@ -239,7 +252,9 @@ Write-Section '11. Edge for the TV windows'
 if (Want 'edge') {
     if ($U) { foreach ($k in $EdgePolicies.Keys) { Set-Reg "$U\$EdgePolicySubkey" $k $EdgePolicies[$k] } }
     $profiles = Join-Path $user.LocalAppData 'TVLauncher\profiles'
-    foreach ($p in 'launcher', 'youtube', 'f1tv', 'browser') {
+    $profileNames = @('launcher') + @($apps.PSObject.Properties | ForEach-Object { $_.Value.launch } |
+        Where-Object { $_.type -in 'edge', 'edge-app' } | ForEach-Object { if ($_.profile) { $_.profile } else { 'browser' } }) | Select-Object -Unique
+    foreach ($p in $profileNames) {
         $d = Join-Path $profiles $p
         if (Test-Path $d) { Write-Ok "profile folder $p" }
         else { Invoke-Change "create Edge profile folder $d" { New-Item -ItemType Directory -Force $d | Out-Null }.GetNewClosure() }
@@ -259,5 +274,5 @@ if ($Apply) {
     Write-Host "Preview finished: $Changes changes would be made. Nothing was changed." -ForegroundColor Cyan
     Write-Host 'On the TV PC, run again in an administrator window with -Apply.'
 }
-Write-Host 'By hand afterwards: sign in to Netflix, Prime Video, Disney+ and Spotify; open YouTube and F1TV once from'
-Write-Host 'the home screen and sign in there; pair the remote; check its buttons on the key-test page (README).'
+Write-Host 'By hand afterwards: open each tile once from the home screen and sign in there (the TV windows keep the'
+Write-Host 'logins); pair the remote; check its buttons in Settings > Remote Button Test (README).'

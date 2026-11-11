@@ -2,6 +2,52 @@
 
 Findings made while building, which later stages depend on. Newest first.
 
+## Stage 6, round 1: fixes after the first install on the mini PC (11 November 2026)
+
+### What the owner found, and the fix
+1. **Setup never asked for the password**, so auto-login failed ("invalid password"). `Get-LocalUser`'s
+   `PasswordRequired` is often False even for accounts with a password. Setup now always asks (Enter = no
+   password / keep the stored one), checks it, and only switches auto-login on once a password is known good.
+2. **Pointer visible**: tv.ahk hides the system pointer on any key press or after 3 s still, parks it in the
+   bottom-right corner (no hover previews), and puts it back where it was when the touchpad is touched. Only
+   without `-Windowed`. Launcher pages also hide it with CSS (`body.pointer-idle`).
+3. **Remote Home opened Edge's own home page in the launcher window**: Home was only caught while another app was
+   in front, so Edge acted on `Browser_Home` itself. Now always caught; on the launcher it becomes F24 (keymap
+   `home`). Safety net: the helper reloads the launcher if its window title is not one of our pages for 10 s.
+4. / 9. **DStv and Twitch** tiles (`dstv.stream`, `twitch.tv`). The Watch row has 8 tiles, shows 6 and slides with
+   the focus (`.row-view` / `.row.slide`). DStv's site only has a plain cyan favicon, so the tile uses its glyph.
+5. / 10. / 11. **Apps are now our own full-screen TV windows** (owner agreed): Netflix, Prime Video, Disney+ and
+   Spotify open their websites (`edge-app`); their Store apps were Edge PWAs, so quality is the same. No title
+   bars (`--app --start-fullscreen`, checked: still full screen after a video leaves full screen). Spotify web
+   minimises on Home; opening the tile again brings the same window back (no second window).
+   **`extensions/tvnav`** (loaded into every TV window) does remote navigation: arrows move a highlight to the
+   nearest clickable thing (same column/row preferred, cards deduplicated by link), OK presses it with a full
+   pointer-event sequence, Backspace = back (leave full screen, else history back; not in text boxes). While
+   watching: Left/Right seek 10 s, OK = full screen then pause/play. Tested with the DevTools protocol on YouTube
+   (results, watch page, seek, full screen, back), Twitch and Spotify (signed out).
+   **Edge now disables `--load-extension` extensions from a profile's second start** (disable reason 16777216).
+   `--disable-features=DisableLoadExtensionCommandLineSwitch` keeps them working (checked over several restarts).
+   This probably also stopped h264only on the mini PC. If a future Edge drops that switch, the extensions need
+   another way in (packed + policy).
+6. **"Test Mode" always showed**: `.pill{display:flex}` beat the `hidden` attribute. Global
+   `[hidden]{display:none!important}`.
+7. **Wrong desktop PIN**: not reproduced. Chromium sends fake mouse events when the page changes under a resting
+   pointer; with the touchpad pointer over the PIN pad that moved the highlight. All hover handlers now use
+   `TV.onHover` (only real pointer movement counts). Rejected PINs log how many digits arrived.
+8. **Network speed test**: Settings > Connections. Cloudflare's speed endpoints (CORS `*`): ping, 8 s download
+   (4 streams), 8 s upload. Dev PC: 34 ms, 938 down, 269 up.
+
+### The remote (touchpad model), tested on the dev PC
+Arrows; OK = Enter; Back = **Backspace** (repeats while held); Home = `Browser_Home`; Search = `Browser_Search`
+(blocked); volume and media keys left to Windows; touchpad = normal mouse. keymap.json updated.
+
+### Tested on the dev PC (test mode)
+`scripts/test-apps.ps1`: all 9 tiles open, Home closes them (Spotify minimises), launcher back in front. Spotify
+reopens as "resumed" with one window. Speed test dialog incl. Back to stop. Sliding row incl. Down to the More row.
+**Not confirmed:** the owner reported the remote checks (Home on the launcher, Search, PIN, YouTube, Spotify) as
+working, but the helper log shows no activity for them, so treat them as still to check on the TV. Pointer hiding
+(off with `-Windowed`) and signed-in Netflix/Prime/Disney+/DStv navigation also need the TV.
+
 ## Stage 5 (setup, uninstall, README), previewed on the dev PC on 9 November 2026
 
 ### Scripts

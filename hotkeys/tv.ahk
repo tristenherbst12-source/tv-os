@@ -1,9 +1,12 @@
 ; TV Launcher hotkeys (AutoHotkey v2).
-; - Home (remote):    leave the current app and bring the launcher back.
+; - Home (remote):    leave the current app and bring the launcher back (on the launcher itself: its own Home).
 ; - Back (remote):    a short press goes to the app as normal; holding it for 0.8 s also goes Home.
+; - Blocked keys:     e.g. the remote's Search button, which would otherwise open a web search.
+; - Pointer:          hidden while the remote's buttons are used (not with -Windowed).
 ; - Escape hatch:     Ctrl+Alt+Shift+D by default: start the Windows desktop (asks for the PIN when one is set).
 ; - While the launcher is in front, every key is reported to the helper for the key-test page.
 ; Keys come from config/keymap.json ("global" section, AutoHotkey key names).
+;   AutoHotkey64.exe tv.ahk [-Windowed]     (-Windowed: testing on a desktop PC, see scripts/start.ps1)
 
 #Requires AutoHotkey v2.0
 #SingleInstance Force
@@ -194,8 +197,88 @@ EscapeHatch(*) {
         MsgBox("Wrong PIN.", "Windows Desktop", "Iconx T3")
 }
 
+; ---------- Home key ----------
+; Always caught. On the launcher it becomes F24 (the page treats it as Home): left alone, Edge would act on
+; Browser_Home itself and open its own home page inside the launcher window, with no way back.
+HomeKey(*) {
+    if LauncherActive()
+        Send("{F24}")
+    else
+        GoHome()
+}
+
+; ---------- which windows Back is handled in ----------
+; On the TV every app is one of our windows, so Back works everywhere. With -Windowed (testing on a desktop PC)
+; it only applies to the TV windows, so Backspace keeps working normally in the PC's own programs.
+TVWindowActive(*) {
+    static lastHwnd := 0, lastResult := false
+    hwnd := WinExist("A")
+    if !hwnd
+        return false
+    if (hwnd = lastHwnd)
+        return lastResult
+    lastHwnd := hwnd
+    lastResult := false
+    try lastResult := InStr(CommandLine(WinGetPID(hwnd)), DataDir "\profiles\") > 0
+    return lastResult
+}
+BackApplies(*) => !LauncherActive() && (!Windowed || TVWindowActive())
+
+; ---------- hide the pointer while the remote buttons are used (TV only, not with -Windowed) ----------
+; The touchpad only moves the pointer when touched, so: hidden on any key press or after 3 s without moving,
+; shown again (where it was) as soon as it moves. While hidden it is parked in the bottom-right corner, so web
+; pages do not keep showing hover previews under it.
+global PointerHidden := false, PointerX := 0, PointerY := 0, PointerLastMove := A_TickCount
+global ParkX := 0, ParkY := 0
+
+SetBlankCursors() {
+    ; Every standard cursor shape replaced by an empty one (restored with SPI_SETCURSORS).
+    for id in [32512, 32513, 32514, 32515, 32516, 32640, 32641, 32642, 32643, 32644, 32645, 32646, 32648, 32649, 32650, 32651] {
+        andMask := Buffer(128, 0xFF), xorMask := Buffer(128, 0)
+        h := DllCall("CreateCursor", "Ptr", 0, "Int", 0, "Int", 0, "Int", 32, "Int", 32, "Ptr", andMask, "Ptr", xorMask, "Ptr")
+        DllCall("SetSystemCursor", "Ptr", h, "UInt", id)
+    }
+}
+RestoreCursors(*) => DllCall("SystemParametersInfo", "UInt", 0x57, "UInt", 0, "Ptr", 0, "UInt", 0)
+
+HidePointer() {
+    global PointerHidden, PointerX, PointerY, ParkX, ParkY
+    if PointerHidden
+        return
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&PointerX, &PointerY)
+    SetBlankCursors()
+    ParkX := A_ScreenWidth - 1, ParkY := A_ScreenHeight - 1
+    DllCall("SetCursorPos", "Int", ParkX, "Int", ParkY)
+    PointerHidden := true
+}
+
+CheckPointer() {
+    global PointerHidden, PointerLastMove
+    static lastX := -1, lastY := -1
+    CoordMode("Mouse", "Screen")
+    MouseGetPos(&x, &y)
+    if PointerHidden {
+        if (x != ParkX || y != ParkY) {          ; touched: put it back where it was, plus the movement
+            DllCall("SetCursorPos", "Int", PointerX + (x - ParkX), "Int", PointerY + (y - ParkY))
+            RestoreCursors()
+            PointerHidden := false
+            PointerLastMove := A_TickCount
+            MouseGetPos(&x, &y)
+        }
+    } else if (x != lastX || y != lastY) {
+        PointerLastMove := A_TickCount
+    } else if (A_TickCount - PointerLastMove > 3000) {
+        HidePointer()
+        MouseGetPos(&x, &y)
+    }
+    lastX := x, lastY := y
+}
+
 ; ---------- key feed for the key-test page ----------
 OnKeyDown(ih, vk, sc) {
+    if !Windowed
+        HidePointer()
     if !LauncherActive()
         return
     name := GetKeyName(Format("vk{:x}sc{:x}", vk, sc))
@@ -203,11 +286,18 @@ OnKeyDown(ih, vk, sc) {
 }
 
 ; ---------- wire it up ----------
+global Windowed := false
+for a in A_Args
+    if (a = "-Windowed")
+        Windowed := true
+
 km := ReadFile(Root "\config\keymap.json")
 
-HotIf((*) => !LauncherActive())
 for k in JsonArray(km, "global", "home")
-    try Hotkey("$" k, GoHome)
+    try Hotkey("$" k, HomeKey)
+for k in JsonArray(km, "global", "block")
+    try Hotkey("$" k, (*) => 0)
+HotIf(BackApplies)
 for k in JsonArray(km, "global", "back")
     try Hotkey("$" k, BackDown)
 HotIf()
@@ -221,3 +311,8 @@ ih := InputHook("V L0 I")
 ih.KeyOpt("{All}", "N")
 ih.OnKeyDown := OnKeyDown
 ih.Start()
+
+if !Windowed {
+    OnExit(RestoreCursors)
+    SetTimer(CheckPointer, 150)
+}

@@ -10,6 +10,7 @@
   --u:min(1vw,1.78vh);
 }
 *{box-sizing:border-box;margin:0;padding:0}
+[hidden]{display:none!important}   /* .pill etc. set display, which would otherwise win over the hidden attribute */
 html,body{height:100%;overflow:hidden;background:var(--bg);color:var(--text);
   font-family:"InterV","Segoe UI",system-ui,sans-serif;font-optical-sizing:auto;-webkit-font-smoothing:antialiased;letter-spacing:-.011em;cursor:default;user-select:none}
 body{transition:background 4s ease}
@@ -125,3 +126,19 @@ body.lite .tile.focus{background:rgba(55,55,85,.85)}
 .race-chip .when{color:var(--dim)}
 .race-chip.live .when{color:#ff8a9c;font-weight:650}
 .top .status-left{right:auto;left:0}
+
+/* Pointer hidden while the remote buttons are in use (js/keys.js) */
+body.pointer-idle,body.pointer-idle *{cursor:none!important}
+
+/* ---------- a big row with more than 6 tiles slides sideways with the focus (js/home.js) ---------- */
+/* The padding gives the focused tile room to grow and glow; the negative margin keeps the approved layout. */
+.row-view{overflow:hidden;padding:calc(var(--u)*2.4) calc(var(--u)*1.8);margin:calc(var(--u)*-2.4) calc(var(--u)*-1.8);
+  -webkit-mask-image:linear-gradient(to right,var(--l,#000) 0,#000 calc(var(--u)*1.8),#000 calc(100% - var(--u)*1.8),var(--r,#000) 100%);
+          mask-image:linear-gradient(to right,var(--l,#000) 0,#000 calc(var(--u)*1.8),#000 calc(100% - var(--u)*1.8),var(--r,#000) 100%)}
+.row-view.more-left{--l:transparent}
+.row-view.more-right{--r:transparent}
+.row.big.slide{grid-template-columns:none;grid-auto-flow:column;
+  grid-auto-columns:calc((100% - var(--u)*1.6*5) / 6);transition:transform .38s cubic-bezier(.2,.9,.3,1)}
+.rows .label + .row-view{margin-top:calc(var(--u)*-2.4)}
+.rows .row-view + .label{margin-top:calc(var(--u)*3)}
+body.lite .row.big.slide{transition:none}

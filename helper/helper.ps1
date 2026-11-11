@@ -86,10 +86,23 @@ function Wait-MainWindow {
     return [IntPtr]::Zero
 }
 
+function Get-ProfileWindow {
+    param([string]$ProfileName)
+    Get-ProcessesForProfile $ProfileName | ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } |
+        Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+}
+
 function Start-EdgeWindow {
     param($l, [string]$ProfileName, [switch]$App)
+    # Already open (e.g. Spotify minimised with music playing): bring that window back instead of opening a
+    # second one, which would start the site again.
+    $running = Get-ProfileWindow $ProfileName
+    if ($running) { [void][TVHelper.Native]::ForceForeground($running.MainWindowHandle); return 'resumed' }
+
+    # DisableLoadExtensionCommandLineSwitch: newer Edge builds otherwise switch --load-extension extensions off
+    # again from the second start of a profile (found 11 Nov 2026).
     $edgeArgs = @("--user-data-dir=`"$(Get-ProfileDir $ProfileName)`"", '--no-first-run', '--no-default-browser-check', '--disable-sync',
-              '--autoplay-policy=no-user-gesture-required', '--disable-features=Translate')
+              '--autoplay-policy=no-user-gesture-required', '--disable-features=Translate,DisableLoadExtensionCommandLineSwitch')
     if ($App) { $edgeArgs += @("--app=`"$($l.url)`"", '--start-fullscreen') }
     else      { $edgeArgs += @('--start-maximized', "`"$($l.url)`"") }
     if ($l.userAgent) { $edgeArgs += "--user-agent=`"$($l.userAgent)`"" }
@@ -97,20 +110,19 @@ function Start-EdgeWindow {
         # Zoom for the couch. Applies to this profile's own Edge process only, never to the user's everyday Edge.
         $edgeArgs += "--force-device-scale-factor=$([string]::Format([Globalization.CultureInfo]::InvariantCulture, '{0}', [double]$l.scale))"
     }
-    if ($l.forceH264) {
-        # Haswell has no VP9 decode: this small extension makes sites think only H.264 is playable.
-        $ext = Join-Path $TV.Root 'extensions\h264only'
-        $edgeArgs += "--load-extension=`"$ext`""
-    }
+    # Remote navigation (arrows / OK / Back) in every TV window; H.264 only where asked for (Haswell has no VP9).
+    $exts = @(Join-Path $TV.Root 'extensions\tvnav')
+    if ($l.forceH264) { $exts += Join-Path $TV.Root 'extensions\h264only' }
+    $edgeArgs += "--load-extension=`"$($exts -join ',')`""
     $p = Start-Process -FilePath (Get-EdgePath) -ArgumentList ($edgeArgs -join ' ') -PassThru
     # If this profile was already running, Edge hands the request over and this process exits at once.
     $h = Wait-MainWindow $p.Id 10
     if ($h -ne [IntPtr]::Zero) { [void][TVHelper.Native]::ForceForeground($h) }
     else {
-        $existing = Get-ProcessesForProfile $ProfileName | ForEach-Object { Get-Process -Id $_.ProcessId -ErrorAction SilentlyContinue } |
-            Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero } | Select-Object -First 1
+        $existing = Get-ProfileWindow $ProfileName
         if ($existing) { [void][TVHelper.Native]::ForceForeground($existing.MainWindowHandle) }
     }
+    return 'started'
 }
 
 function Invoke-Launch {
@@ -141,8 +153,8 @@ function Invoke-Launch {
             Log "launch $Id failed: $($l.package) not installed"
             return @{ status = 404; body = @{ error = 'not installed'; app = $Id } }
         }
-        'edge-app' { Start-EdgeWindow $l $l.profile -App; Log "launch $Id edge-app $($l.url)" }
-        'edge'     { Start-EdgeWindow $l $(if ($l.profile) { $l.profile } else { 'browser' }); Log "launch $Id edge $($l.url)" }
+        'edge-app' { $how = Start-EdgeWindow $l $l.profile -App; Log "launch $Id edge-app $($l.url) ($how)" }
+        'edge'     { $how = Start-EdgeWindow $l $(if ($l.profile) { $l.profile } else { 'browser' }); Log "launch $Id edge $($l.url) ($how)" }
         default    { return @{ status = 400; body = @{ error = "launch type '$($l.type)' is handled by the launcher page"; app = $Id } } }
     }
     return @{ status = 200; body = @{ ok = $true; app = $Id } }
@@ -485,7 +497,7 @@ function Handle-Request {
         }
         '^POST /desktop$' {
             $body = Read-Body $ctx
-            if (-not (Test-DesktopPin ([string]$body.pin))) { Log 'escape hatch: wrong PIN'; Send-Response $ctx 403 @{ error = 'wrong pin' }; return }
+            if (-not (Test-DesktopPin ([string]$body.pin))) { Log "escape hatch: wrong PIN ($(([string]$body.pin).Length) digits entered)"; Send-Response $ctx 403 @{ error = 'wrong pin' }; return }
             if ($TestMode -and (Get-Process explorer -ErrorAction SilentlyContinue)) {
                 Log 'TEST MODE: would start explorer.exe (it is already running)'
                 Send-Response $ctx 200 @{ ok = $true; testMode = $true }; return
@@ -518,6 +530,18 @@ function Test-LauncherAlive {
     return [bool](Get-ProcessesForProfile 'launcher' | Select-Object -First 1)
 }
 
+# The launcher window's title is its page title. Anything else means it left our pages (for example Edge's own
+# home page), and there is no address bar to come back with, so the home screen is reloaded.
+$OurTitles = '^(Home|Settings|Race Calendar|Power|Remote Key Test)$'
+$strayChecks = 0
+function Test-LauncherOnOurPage {
+    $ids = @(Get-ProcessesForProfile 'launcher' | ForEach-Object { [int]$_.ProcessId })
+    if (-not $ids.Count) { return $true }
+    $titles = @(Get-Process -Id $ids -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle })
+    if (-not $titles.Count) { return $true }            # no window yet (starting up)
+    return [bool]($titles | Where-Object { $_ -match $OurTitles })
+}
+
 $lastCheck = Get-Date '2000-01-01'
 $task = $listener.GetContextAsync()
 try {
@@ -538,7 +562,16 @@ try {
             if (-not (Test-LauncherAlive)) {
                 Log 'launcher not running: starting it'
                 $LauncherProc = Start-Launcher -Windowed:$Windowed
-            }
+                $strayChecks = 0
+            } elseif (-not (Test-LauncherOnOurPage)) {
+                $strayChecks++
+                if ($strayChecks -ge 2) {       # 10 s away from our pages: bring the home screen back
+                    Log 'launcher window left the TV pages: reloading the home screen'
+                    Stop-Launcher; Start-Sleep -Milliseconds 800
+                    $LauncherProc = Start-Launcher -Windowed:$Windowed
+                    $strayChecks = 0
+                }
+            } else { $strayChecks = 0 }
         }
     }
 } finally {

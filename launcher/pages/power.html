@@ -67,7 +67,7 @@
     const txt = el('div');
     txt.append(el('div', 'name', a.name), el('div', 'sub', a.sub));
     t.append(ic, txt);
-    t.addEventListener('mouseenter', () => focus(i));
+    TV.onHover(t, () => focus(i));
     t.addEventListener('click', () => { focus(i); choose(a); });
     host.appendChild(t);
     return t;

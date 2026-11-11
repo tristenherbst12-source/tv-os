@@ -57,10 +57,12 @@ $null = Get-HelperInfo     # create the token now, before the helper and the lau
 $helper = Start-Helper
 if (-not (Wait-Helper)) { Log 'helper did not answer within 10 s (continuing; it will be restarted if it exits)' }
 $ahk = $null
-if ($ahkExe) { $ahk = Start-Process $ahkExe -ArgumentList "`"$(Join-Path $TV.Root 'hotkeys\tv.ahk')`"" -PassThru }
+$ahkArgs = "`"$(Join-Path $TV.Root 'hotkeys\tv.ahk')`"" + $(if ($Windowed) { ' -Windowed' } else { '' })
+function Start-Hotkeys { Start-Process $ahkExe -ArgumentList $ahkArgs -PassThru }
+if ($ahkExe) { $ahk = Start-Hotkeys }
 
 while ($true) {
     Start-Sleep -Seconds 5
     if ($helper.HasExited) { Log "helper exited ($($helper.ExitCode)): restarting"; $helper = Start-Helper }
-    if ($ahk -and $ahk.HasExited) { Log "hotkeys exited ($($ahk.ExitCode)): restarting"; $ahk = Start-Process $ahkExe -ArgumentList "`"$(Join-Path $TV.Root 'hotkeys\tv.ahk')`"" -PassThru }
+    if ($ahk -and $ahk.HasExited) { Log "hotkeys exited ($($ahk.ExitCode)): restarting"; $ahk = Start-Hotkeys }
 }

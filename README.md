@@ -1,8 +1,8 @@
 # TV Launcher
 
 A home screen for the TV mini PC. When the PC starts, it signs in by itself and shows this home screen instead of the
-Windows desktop: YouTube, Netflix, Prime Video, Disney+, F1TV, Spotify, a browser, the race calendar, settings and
-power, all driven with the remote.
+Windows desktop: YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify, a browser, the race calendar,
+settings and power, all driven with the remote.
 
 This guide sets it up on a fresh Windows 10 Pro install. It takes about an hour, most of it waiting for Windows and
 the apps.
@@ -15,8 +15,7 @@ the apps.
 - The remote's USB receiver plugged in.
 - A keyboard and mouse for setting up (not needed afterwards).
 - This `TVLauncher` folder on a USB stick.
-- Your logins for Netflix, Prime Video, Disney+, Spotify, YouTube and F1TV, and a Microsoft account for the
-  Microsoft Store.
+- Your logins for the services you use (Netflix, Prime Video, Disney+, DStv, YouTube, F1TV, Twitch, Spotify).
 
 ## 1. Prepare Windows
 
@@ -38,14 +37,14 @@ the apps.
 Copy the whole `TVLauncher` folder to **`C:\TVLauncher`**. Keep it there: the PC starts it from that folder.
 (Not the Desktop, Downloads or OneDrive.)
 
-## 3. Install the apps
+## 3. Apps: nothing to install
 
-Open the **Microsoft Store**, sign in to the Store with your Microsoft account (only the Store, not Windows), and
-install:
+Every streaming tile opens the service's own website in a full-screen TV window, where the remote's arrows, OK and
+Back work. (The Microsoft Store versions of Netflix, Prime Video and Disney+ are the same websites in a different
+frame, so the picture quality is the same.) You sign in to each one from the home screen in step 6.
 
-- **Netflix**, **Prime Video**, **Disney+**, **Spotify**
-
-Open each one once and sign in. YouTube and F1TV are websites; you sign in to those in step 6.
+Optional: if the Store apps for Netflix, Prime Video, Disney+ or Spotify are installed, their icons are used on the
+tiles; otherwise the websites' own icons are.
 
 ## 4. Preview the setup
 
@@ -73,15 +72,17 @@ Type `SETUP` when it asks, and the `TV` account's Windows password when it asks 
 1. Checks the Windows version and reminds you about ESU.
 2. Sets the time zone to South Africa.
 3. Removes preinstalled extras (news, weather, Xbox overlays, Solitaire and so on) and turns off tips, ads,
-   suggestions, search highlights, notification pop-ups and background apps. Netflix, Prime Video, Disney+,
-   Spotify, the Store and Edge are never touched.
+   suggestions, search highlights, notification pop-ups and background apps. The Store, Edge and any streaming
+   apps are never touched.
 4. Windows Update: only restarts between 02:00 and 08:00, never in the evening.
 5. Power: never sleeps on its own (the launcher's own Screen Off setting handles the screen), keeps the remote's USB
    receiver awake, no password after waking, hibernation off.
-6. Signs in to `TV` automatically. The password is stored encrypted by Windows, not as plain text.
+6. Signs in to `TV` automatically. It always asks for the password (just press Enter if the account has none),
+   checks it, and stores it encrypted by Windows, not as plain text. Automatic sign-in is only switched on once the
+   password is right.
 7. Starts the TV launcher instead of the Windows desktop, **for the `TV` account only**.
-8. Installs AutoHotkey v2 (it makes the remote's Home and Back buttons work everywhere).
-9. Checks that Netflix, Prime Video, Disney+ and Spotify are installed.
+8. Installs AutoHotkey v2 (it makes the remote's Home and Back buttons work everywhere, and hides the pointer).
+9. Lists the apps and where each one opens.
 10. Copies each app's own icon onto its tile.
 11. Sets Edge up for the TV windows (no account sign-in or sync in them, no welcome pages).
 
@@ -92,23 +93,28 @@ You can run it again any time; it only changes what is different. To leave steps
 
 Restart the PC. It should sign in by itself and open the home screen. Then, with the remote:
 
-1. Open **YouTube** and sign in (the window keeps the login). Same for **F1TV**.
-2. Open Netflix, Prime Video, Disney+ and Spotify once to check they are still signed in.
-3. **Settings > Remote Button Test:** press every button on the remote. Each one shows what it sends. If Home, Back,
+1. Open each tile you use and sign in (each window keeps its own login). The touchpad or a keyboard is easiest for
+   typing passwords.
+2. **Settings > Remote Button Test:** press every button on the remote. Each one shows what it sends. If Home, Back,
    OK or the arrows show nothing in the "Launcher Action" column, note the values and update
    `C:\TVLauncher\config\keymap.json` (or ask for help). Hold Back for 2 seconds to leave.
 
 ## Using it
 
-| Button | What it does |
-|---|---|
-| Arrows, OK | Move and open |
-| Back | Back inside an app; **hold** it to go to the home screen |
-| Home | Back to the home screen from any app |
-| L (keyboard) | Lite Mode on/off (less animation, if the PC struggles) |
+| Button | On the home screen | Inside an app |
+|---|---|---|
+| Arrows | Move between tiles | Move the highlight to the next thing in that direction |
+| OK | Open | Press the highlighted thing |
+| Back | Back to the home screen | Back a page (or out of full screen); **hold** it to go home |
+| Home | – | Back to the home screen |
+| While watching | | Left/Right skip 10 s; OK makes the video full screen, then pauses/plays |
+| Play/Pause, volume | Work everywhere | |
+| L (keyboard) | Lite Mode on/off (less animation, if the PC struggles) | |
 
+- The pointer disappears while you use the buttons; touch the touchpad and it comes back.
 - **Spotify** keeps playing when you press Home; the other apps close.
-- **Settings** has the volume, sound output, sleep timer, screen-off timer, wallpaper, Lite Mode, Wi-Fi and Bluetooth.
+- **Settings** has the volume, sound output, sleep timer, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
+  and a network speed test.
 - **Power** has Sleep, Restart and Shut Down. Any button on the remote wakes the PC from Sleep.
 
 ## Getting to the Windows desktop

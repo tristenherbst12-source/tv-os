@@ -54,7 +54,7 @@ window.TV = window.TV || {};
         const row = el('div', 'dialog-buttons');
         const btns = buttons.map((b, i) => {
           const x = el('div', 'btn' + (b.danger ? ' danger' : ''), b.label);
-          x.addEventListener('mouseenter', () => focus(i));
+          TV.onHover(x, () => focus(i));
           x.addEventListener('click', () => done(b.value));
           row.appendChild(x);
           return x;
@@ -80,6 +80,53 @@ window.TV = window.TV || {};
       });
     },
 
+    /* A dialog whose content changes while it is open (e.g. the speed test).
+       Returns { body, setButtons(buttons) -> Promise<value>, close(), closed: Promise }.
+       Back / Home close it; with buttons shown, Left/Right/OK pick one like confirm(). */
+    live({ title }) {
+      const wrap = el('div', 'modal');
+      const box = el('div', 'dialog');
+      box.appendChild(el('div', 'dialog-title', title));
+      const body = el('div', 'dialog-body');
+      const row = el('div', 'dialog-buttons');
+      box.append(body, row);
+      wrap.appendChild(box);
+      document.body.appendChild(wrap);
+      requestAnimationFrame(() => wrap.classList.add('show'));
+      let btns = [], buttons = [], f = 0, pick = null, closedResolve;
+      const closed = new Promise(r => { closedResolve = r; });
+      function focus(i) { if (btns[f]) btns[f].classList.remove('focus'); f = i; if (btns[f]) btns[f].classList.add('focus'); }
+      const m = {
+        handle(action) {
+          if (action === 'back' || action === 'home') { finish(null); return true; }
+          if (!btns.length) return true;
+          if (action === 'left') focus(Math.max(0, f - 1));
+          else if (action === 'right') focus(Math.min(btns.length - 1, f + 1));
+          else if (action === 'ok') { const p = pick; pick = null; if (p) p(buttons[f].value); }
+          return true;
+        }
+      };
+      function finish(v) { if (pick) pick(v); close(wrap, m); closedResolve(v); }
+      modals.push(m);
+      return {
+        body,
+        setButtons(list) {
+          buttons = list; row.innerHTML = '';
+          btns = list.map((b, i) => {
+            const x = el('div', 'btn' + (b.danger ? ' danger' : ''), b.label);
+            TV.onHover(x, () => focus(i));
+            x.addEventListener('click', () => { focus(i); const p = pick; pick = null; if (p) p(b.value); });
+            row.appendChild(x);
+            return x;
+          });
+          f = 0; focus(0);
+          return new Promise(r => { pick = r; });
+        },
+        close() { finish(null); },
+        closed
+      };
+    },
+
     /* 4-digit PIN entry: arrows + OK on the keypad, or the remote's number keys. Resolves with the PIN or null. */
     pinPad(title, hint) {
       return new Promise(resolve => {
@@ -95,7 +142,7 @@ window.TV = window.TV || {};
         const labels = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'Clear', '0', 'Delete'];
         const keys = labels.map((l, i) => {
           const k = el('div', 'btn pin-key' + (l.length > 1 ? ' small' : ''), l);
-          k.addEventListener('mouseenter', () => focus(i));
+          TV.onHover(k, () => focus(i));
           k.addEventListener('click', () => press(l));
           grid.appendChild(k);
           return k;

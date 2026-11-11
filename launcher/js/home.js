@@ -7,7 +7,8 @@
   const NOT_YET = {};
   const FOCUS_KEY = 'tv.home.focus';   // tile to focus when coming back (e.g. from Settings)
 
-  let cfg, grid = [], rows = [], fr = 0, fc = 0, busy = false;
+  const VISIBLE_BIG = 6;                // big tiles on screen at once (the approved layout)
+  let cfg, grid = [], rows = [], rowEls = [], firstShown = [], fr = 0, fc = 0, busy = false;
 
   /* ---------- icons: real file if it loads, otherwise the glyph ---------- */
   function probe(src, ms) {
@@ -48,7 +49,7 @@
   function build() {
     const host = $('rows');
     host.innerHTML = '';
-    grid = []; rows = [];
+    grid = []; rows = []; rowEls = []; firstShown = [];
     (cfg.apps.rows || []).forEach(row => {
       const apps = (row.apps || []).map(id => Object.assign({ id }, cfg.apps.apps[id])).filter(a => a.name);
       if (!apps.length) return;
@@ -58,8 +59,18 @@
       label.textContent = row.label || '';
       const el = document.createElement('div');
       el.className = 'row ' + (row.size === 'small' ? 'small' : 'big');
-      el.style.setProperty('--cols', apps.length);
-      host.append(label, el);
+      // More big tiles than fit (6): the tiles keep the approved size and the row slides along with the focus.
+      const slides = row.size !== 'small' && apps.length > VISIBLE_BIG;
+      el.style.setProperty('--cols', slides ? VISIBLE_BIG : apps.length);
+      if (slides) {
+        el.classList.add('slide');
+        const view = document.createElement('div');
+        view.className = 'row-view';
+        view.appendChild(el);
+        host.append(label, view);
+      } else host.append(label, el);
+      rowEls.push(slides ? el : null);
+      firstShown.push(0);
 
       grid.push(apps.map((a, c) => {
         const t = document.createElement('div');
@@ -78,7 +89,7 @@
           text.lastChild.textContent = a.sub || '';
         }
         t.appendChild(text);
-        t.addEventListener('mouseenter', () => setFocus(r, c));
+        TV.onHover(t, () => setFocus(r, c));
         t.addEventListener('click', () => { setFocus(r, c); launch(a); });
         el.appendChild(t);
         return t;
@@ -100,12 +111,28 @@
     if (grid[fr] && grid[fr][fc]) grid[fr][fc].classList.remove('focus');
     fr = r; fc = c;
     grid[fr][fc].classList.add('focus');
+    const el = rowEls[r];
+    if (el) {
+      let first = firstShown[r];
+      if (c < first) first = c;
+      else if (c > first + VISIBLE_BIG - 1) first = c - VISIBLE_BIG + 1;
+      first = Math.max(0, Math.min(first, grid[r].length - VISIBLE_BIG));
+      firstShown[r] = first;
+      // Distance from the row's first tile (offsetLeft itself is measured from the screen's edge).
+      el.style.transform = 'translateX(' + (grid[r][0].offsetLeft - grid[r][first].offsetLeft) + 'px)';
+      el.parentElement.classList.toggle('more-left', first > 0);
+      el.parentElement.classList.toggle('more-right', first + VISIBLE_BIG < grid[r].length);
+    }
   }
 
   /* Moving between rows of different lengths keeps roughly the same horizontal position. */
   function mapCol(c, from, to) {
-    const a = grid[from].length, b = grid[to].length;
-    return a <= 1 ? 0 : Math.min(Math.round(c * (b - 1) / (a - 1)), b - 1);
+    // Work with what is on screen: a sliding row shows VISIBLE_BIG tiles starting at firstShown.
+    const shownFrom = rowEls[from] ? VISIBLE_BIG : grid[from].length;
+    const shownTo = rowEls[to] ? VISIBLE_BIG : grid[to].length;
+    const pos = c - (rowEls[from] ? firstShown[from] : 0);
+    const mapped = shownFrom <= 1 ? 0 : Math.round(pos * (shownTo - 1) / (shownFrom - 1));
+    return Math.min((rowEls[to] ? firstShown[to] : 0) + mapped, grid[to].length - 1);
   }
 
   /* ---------- launching ---------- */
