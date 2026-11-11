@@ -502,7 +502,8 @@ function Handle-Request {
                 Log 'TEST MODE: would start explorer.exe (it is already running)'
                 Send-Response $ctx 200 @{ ok = $true; testMode = $true }; return
             }
-            Log 'escape hatch: starting explorer.exe'
+            Log 'escape hatch: starting explorer.exe (launcher no longer restarted until the next sign-in)'
+            $script:Supervise = $false
             Start-Process explorer.exe
             Send-Response $ctx 200 @{ ok = $true }; return
         }
@@ -530,16 +531,22 @@ function Test-LauncherAlive {
     return [bool](Get-ProcessesForProfile 'launcher' | Select-Object -First 1)
 }
 
-# The launcher window's title is its page title. Anything else means it left our pages (for example Edge's own
-# home page), and there is no address bar to come back with, so the home screen is reloaded.
-$OurTitles = '^(Home|Settings|Race Calendar|Power|Remote Key Test)$'
+# The launcher window's title starts with its page title: "Home" in a window, "Home - [InPrivate] - Microsoft Edge"
+# in kiosk mode. Anything else means it left our pages (for example Edge's own home page), and there is no address
+# bar to come back with, so the home screen is reloaded. A title that is still the file name (page loading) counts
+# as ours. At most 3 reloads in 10 minutes, so a wrong guess can never turn into an endless restart loop.
+$OurTitles = '^(Home|Settings|Race Calendar|Power|Remote Key Test)( - |$)|\.html'
 $strayChecks = 0
+$strayReloads = @()
+$Supervise = $true          # turned off by the escape hatch, so the desktop stays usable
 function Test-LauncherOnOurPage {
     $ids = @(Get-ProcessesForProfile 'launcher' | ForEach-Object { [int]$_.ProcessId })
     if (-not $ids.Count) { return $true }
     $titles = @(Get-Process -Id $ids -ErrorAction SilentlyContinue | Where-Object { $_.MainWindowTitle } | ForEach-Object { $_.MainWindowTitle })
     if (-not $titles.Count) { return $true }            # no window yet (starting up)
-    return [bool]($titles | Where-Object { $_ -match $OurTitles })
+    if ($titles | Where-Object { $_ -match $OurTitles }) { return $true }
+    $script:StrayTitle = $titles -join ' | '
+    return $false
 }
 
 $lastCheck = Get-Date '2000-01-01'
@@ -557,7 +564,7 @@ try {
         }
         try { Test-SleepTimer } catch { Log "sleep timer error: $($_.Exception.Message)" }
         # Keep the launcher window alive (checked every 5 s).
-        if ($ManageLauncher -and ((Get-Date) - $lastCheck).TotalSeconds -ge 5) {
+        if ($ManageLauncher -and $Supervise -and ((Get-Date) - $lastCheck).TotalSeconds -ge 5) {
             $lastCheck = Get-Date
             if (-not (Test-LauncherAlive)) {
                 Log 'launcher not running: starting it'
@@ -565,11 +572,15 @@ try {
                 $strayChecks = 0
             } elseif (-not (Test-LauncherOnOurPage)) {
                 $strayChecks++
-                if ($strayChecks -ge 2) {       # 10 s away from our pages: bring the home screen back
-                    Log 'launcher window left the TV pages: reloading the home screen'
+                $strayReloads = @($strayReloads | Where-Object { ((Get-Date) - $_).TotalMinutes -lt 10 })
+                if ($strayChecks -ge 3 -and $strayReloads.Count -lt 3) {   # 15 s away from our pages
+                    Log "launcher window left the TV pages (title: $StrayTitle): reloading the home screen"
                     Stop-Launcher; Start-Sleep -Milliseconds 800
                     $LauncherProc = Start-Launcher -Windowed:$Windowed
+                    $strayReloads += Get-Date
                     $strayChecks = 0
+                } elseif ($strayChecks -eq 3) {
+                    Log "launcher window left the TV pages (title: $StrayTitle): already reloaded 3 times in 10 minutes, leaving it"
                 }
             } else { $strayChecks = 0 }
         }
