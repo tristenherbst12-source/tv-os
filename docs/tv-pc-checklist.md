@@ -1,6 +1,6 @@
 # Mini PC checklist (stage 6)
 
-Everything that could only be tested on the TV PC itself. Follow README.md to install, then tick these off.
+Everything that can only be tested on the TV PC itself. Follow README.md to install, then tick these off.
 Write down anything that fails (what you pressed, what happened) so it can be fixed.
 
 ## Copying the folder
@@ -15,40 +15,55 @@ robocopy C:\Users\trist\OneDrive\Dokumente\appdev\tv-os E:\TVLauncher /E /XD .gi
 
 ## Setup (README steps 4–5)
 - [ ] Preview runs as the `TV` user in an admin window; only expected `[check]` lines.
-- [ ] `-Apply` asks for `SETUP` and the password, and rejects a wrong password.
+- [ ] `-Apply` asks for `SETUP` and **asks for the password**, and rejects a wrong one.
 - [ ] AutoHotkey gets installed by winget.
-- [ ] Restart: signs in by itself, no lock screen, home screen appears (no Windows desktop, no taskbar).
+- [ ] Restart: signs in by itself (no "invalid password"), no lock screen, home screen appears (no Windows
+      desktop, no taskbar).
 - [ ] Running setup again shows almost everything as `[ok]`.
 
 ## Home screen and performance (Haswell iGPU)
 - [ ] Wallpaper drifts smoothly; moving between tiles feels instant.
 - [ ] If not: Lite Mode (L key or Settings) fixes it. Note which one you needed.
-- [ ] Real icons on all tiles (re-run `scripts\extract-icons.ps1` if one shows a plain glyph).
+- [ ] Real icons on the tiles (DStv shows a TV symbol on purpose).
+- [ ] The Watch row slides when you move right past the 6th tile (8 tiles: up to Spotify).
 - [ ] "Next Session" chip shows; Race Calendar loads; unplug the network and it still shows the saved calendar.
 
 ## Remote
-- [ ] Settings > Remote Button Test: every button shows up. Note the values for any that do not have a
-      "Launcher Action" (Home, Back, OK, arrows, volume).
-- [ ] Home button returns home from every app; hold Back returns home; tap Back works inside apps.
-- [ ] Volume buttons change the volume.
-- [ ] Air-mouse pointer works in YouTube and the browser.
+- [ ] **Home on the home screen stays on the home screen** (no Edge page).
+- [ ] **Search button does nothing.**
+- [ ] **The pointer disappears** when you press a button or leave the touchpad for 3 s, and comes back (where it
+      was) when you touch the touchpad.
+- [ ] Home returns home from every app; **holding Back** returns home; a short Back goes back inside apps.
+- [ ] Volume and play/pause buttons work.
+- [ ] Settings > Remote Button Test: anything without a "Launcher Action" is noted.
 
-## Apps
-- [ ] Each tile opens, plays in 1080p, and Home closes it (Spotify: minimises and keeps playing).
-- [ ] YouTube: 1080p plays without stuttering (H.264 is forced). Note any "developer mode extensions" pop-up.
-- [ ] Netflix / Prime / Disney+ still sign in fine with the Edge settings from setup.
-- [ ] YouTube and F1TV keep their logins after a restart.
+## Apps (sign in to each once; the window keeps the login)
+For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
+- [ ] Opens full screen, **no title bar**, text readable from the couch (scale 125%, YouTube 150%).
+- [ ] **Arrows move a blue highlight**, OK opens what it is on, Back goes back a page.
+- [ ] Playing a video: Left/Right skip 10 s, OK goes full screen then pauses, Back leaves full screen.
+- [ ] Plays in 1080p without stuttering (YouTube: H.264 is forced).
+- [ ] Home closes it and the home screen comes back.
+- [ ] Note any page where the highlight cannot reach something, or lands somewhere odd (site + what you pressed).
+- [ ] Spotify: keeps playing after Home; opening the tile again brings the same window back.
+- [ ] Logins still there after a restart.
 
 ## Settings and power (real, not test mode)
+- [ ] **No "Test Mode" badge** in Settings or Power.
+- [ ] Network Speed Test gives sensible numbers.
 - [ ] Sound Output switches between the TV and Bluetooth headphones/soundbar.
 - [ ] Bluetooth: pairing page opens; Home comes back from it.
 - [ ] Screen Off When Idle: the TV goes to standby, and a remote button wakes it.
 - [ ] Sleep: PC sleeps; a remote button wakes it straight to the home screen (no password).
 - [ ] Sleep timer (set 30 min) really sleeps / shuts down.
 - [ ] Restart and Shut Down work.
-- [ ] Windows Desktop (with PIN) opens explorer; restarting brings the TV screen back.
-- [ ] Ctrl+Alt+Shift+D on a keyboard does the same.
+- [ ] **Desktop PIN: set one with the remote, then Windows Desktop with the same PIN opens the desktop.** If it
+      says "Wrong PIN", note it: `logs\helper.log` then shows how many digits arrived.
+- [ ] Ctrl+Alt+Shift+D on a keyboard does the same; restarting brings the TV screen back.
 
 ## Overnight
 - [ ] Left on the home screen overnight: still responsive in the morning, no Windows pop-ups or update restarts
       in the evening.
+
+## Logs to bring back if something fails
+`C:\Users\TV\AppData\Local\TVLauncher\logs\helper.log` and `start.log`.
