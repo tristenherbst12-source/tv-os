@@ -17,6 +17,12 @@
     '[contenteditable=true], [role=button], [role=link], [role=tab], [role=menuitem], [role=option], [role=checkbox], ' +
     '[role=switch], [role=radio], [role=slider], [tabindex]:not([tabindex="-1"]), [onclick]';
   const SEEK_SECONDS = 10;
+  // Netflix: its player does its own seeking with Left/Right (it refuses being moved from outside), and a card
+  // under the (hidden) pointer pops up a preview that covers its neighbours, so the pointer is moved off the page.
+  const NETFLIX = /(^|\.)netflix\.com$/.test(location.hostname);
+  // Rows a site draws as one thing but builds from several links and buttons: one stop each, OK plays it.
+  const ROW_STOPS = location.hostname === 'open.spotify.com' ? '[data-testid="tracklist-row"]' : null;
+  const nativePlayer = () => NETFLIX && location.pathname.startsWith('/watch');
   let DEBUG = false;
   try { DEBUG = sessionStorage.getItem('tvnav-debug') === '1'; } catch (e) { /* storage blocked */ }
   let current = null;           // highlighted element
@@ -70,11 +76,12 @@
     return { left, top, right, bottom, width: right - left, height: bottom - top, full: b };
   }
 
+  if (DEBUG) window.__tvnavCandidates = () => candidates();   // for testing (sessionStorage tvnav-debug = 1)
   function candidates() {
     const vh = innerHeight, vw = innerWidth;
     const out = [];
     const seen = new Set();
-    for (const el of document.querySelectorAll(CLICKABLE)) {
+    for (const el of [...document.querySelectorAll(CLICKABLE), ...pointerBoxes(), ...(ROW_STOPS ? document.querySelectorAll(ROW_STOPS) : [])]) {
       if (seen.has(el) || el === ring) continue;
       seen.add(el);
       // (aria-hidden is not a reason to skip: sites hide duplicate links such as video thumbnails from screen
@@ -86,8 +93,12 @@
       if (b.width > vw * 1.1 || b.width * b.height > vw * vh * 0.6) continue;
       if (b.bottom < -vh * 1.5 || b.top > vh * 2.5 || b.right < -vw || b.left > vw * 2) continue;
       if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
-      if (!paints(el) || covered(el, b)) continue;
+      if (!(paints(el) || clickLayer(el, b)) || covered(el, b)) continue;
       out.push(el);
+    }
+    if (ROW_STOPS) {
+      const rows = out.filter(e => e.matches(ROW_STOPS));
+      if (rows.length) for (let i = out.length - 1; i >= 0; i--) if (!out[i].matches(ROW_STOPS) && rows.some(r => r.contains(out[i]))) out.splice(i, 1);
     }
     // Tiles: sites often make the whole tile clickable (pointer cursor, cover picture) but only its title text a
     // link (Spotify). Then the tile is the stop, and the bits inside it are not stops of their own.
@@ -163,15 +174,60 @@
     return result;
   }
 
+  const letGo = new WeakSet();      // pop-ups the highlight was stuck in and left
+  let stuck = 0;
+  // What happened, for tvnav-host.log (so a page that misbehaves on the TV can be fixed without seeing it).
+  let notes = 0, lastNote = 0;
+  function describe(el) {
+    const b = el.getBoundingClientRect();
+    const name = (el.getAttribute('aria-label') || el.textContent || '').trim().replace(/\s+/g, ' ').slice(0, 30);
+    return el.tagName.toLowerCase() + (el.id ? '#' + el.id : '') + (el.getAttribute('role') ? '[' + el.getAttribute('role') + ']' : '') +
+      ' "' + name + '" @' + Math.round(b.left) + ',' + Math.round(b.top) + ' ' + Math.round(b.width) + 'x' + Math.round(b.height);
+  }
+  function note(msg) {
+    if (typeof window.tvnavLog !== 'function' || notes > 60 || performance.now() - lastNote < 1500) return;
+    notes++; lastNote = performance.now();
+    try { window.tvnavLog(location.host + location.pathname.slice(0, 40) + ': ' + msg); } catch (e) { /* ignore */ }
+  }
+  /* Boxes that are clickable only because the site listens for clicks on them (DStv's profiles, channels and
+     cards are plain boxes): the outermost box with a hand pointer, with no link or button inside it. */
+  function pointerBoxes() {
+    const out = [];
+    if (!document.body) return out;
+    const walk = document.createTreeWalker(document.body, NodeFilter.SHOW_ELEMENT);
+    for (let n = walk.nextNode(), seen = 0; n && seen < 6000; n = walk.nextNode(), seen++) {
+      if (n === ring || /^(A|BUTTON|INPUT|SELECT|TEXTAREA|svg|path|SCRIPT|STYLE)$/.test(n.tagName)) continue;
+      const p = n.parentElement;
+      if (getComputedStyle(n).cursor !== 'pointer' || (p && getComputedStyle(p).cursor === 'pointer')) continue;
+      const b = n.getBoundingClientRect();
+      if (b.width < 24 || b.height < 24 || b.bottom < -innerHeight || b.top > innerHeight * 2.5) continue;
+      // (a hidden edit button inside, as on DStv's profiles, does not count)
+      if (n.matches(CLICKABLE) || [...n.querySelectorAll(CLICKABLE)].some(c => {
+        const r = c.getBoundingClientRect();
+        return r.width >= 12 && r.height >= 12 && c.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+      })) continue;
+      out.push(n);
+    }
+    return out;
+  }
+
   // The front-most open pop-up: a dialog (or a box marked modal) that is showing and of a real size.
   function openPopup() {
     const found = [...document.querySelectorAll('dialog[open], [aria-modal="true"], [role="dialog"], [role="alertdialog"]')]
       .filter(d => {
         const b = d.getBoundingClientRect();
-        return b.width > 120 && b.height > 80 && b.bottom > 0 && b.top < innerHeight &&
+        return b.width > 120 && b.height > 80 && b.bottom > 0 && b.top < innerHeight && !hoverPreview(d) && !letGo.has(d) &&
           d.checkVisibility({ opacityProperty: true, visibilityProperty: true });
       });
     return found.length ? found[found.length - 1] : null;      // the last one in the page is usually on top
+  }
+  // Hover previews (Netflix's card pop-up) are not pop-ups to stay in.
+  function hoverPreview(d) { return /mini-modal|preview-?modal--mini|hover-?card/i.test(String(d.className)) && d.getAttribute('aria-modal') !== 'true'; }
+  // The page's pointer off the page, so nothing shows as hovered (only where hover pops things up: Netflix).
+  function parkPointer() {
+    if (!NETFLIX || document.fullscreenElement || typeof window.tvnavClick !== 'function') return;
+    ignoreMouseUntil = performance.now() + 500;
+    window.tvnavClick(JSON.stringify({ x: -40, y: -40, move: true }));
   }
 
   // The tile a small link sits in, if any: a box up to 5 levels up with a pointer cursor and a big picture,
@@ -214,6 +270,16 @@
     if (cs.backgroundImage !== 'none' || !CLEAR.test(cs.backgroundColor)) return true;
     return parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none' && !CLEAR.test(cs.borderTopColor);
   }
+  // A see-through click area laid exactly over something that shows (Spotify's library rows): that thing.
+  function clickLayer(el, b) {
+    if (getComputedStyle(el).cursor !== 'pointer') return false;
+    for (let p = el.parentElement, i = 0; p && i < 2; p = p.parentElement, i++) {
+      const pb = p.getBoundingClientRect();
+      if (pb.width * pb.height > b.width * b.height * 1.3) return false;
+      if (paints(p)) return true;
+    }
+    return false;
+  }
   function paints(el) {
     if (/^(INPUT|SELECT|TEXTAREA|IMG|VIDEO|CANVAS|IFRAME)$/.test(el.tagName)) return true;
     if (boxShows(el, getComputedStyle(el))) return true;
@@ -242,6 +308,10 @@
   // YouTube's settings menu lies over the progress bar's hover area).
   const clickPoints = new WeakMap();
   function covered(el, b) {
+    // Only the part showing in its scrolling list counts (Spotify's song list runs on under the player bar).
+    const v = visibleBox(el);
+    if (v.width < 8 || v.height < 8) return false;               // scrolled out of its list: cannot tell
+    b = { left: v.left, top: v.top, width: v.width, height: v.height };
     const x = b.left + b.width / 2, y = b.top + b.height / 2;
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;   // off screen: cannot tell
     clickPoints.delete(el);
@@ -343,7 +413,13 @@
       if (score(from, box, dir) === Infinity) continue;
       list.push({ el, b: box, hidden: box === v.full });
     }
-    let best = vertical ? pickInNextRow(from, list, dir, fromEl) : pickBest(from, list, dir);
+    // Up goes back through the rows above (scrolling to them) before the menu bar pinned to the top of the screen.
+    let pool = list;
+    if (dir === 'up' && fromEl && !pinned(fromEl)) {
+      const rows = list.filter(c => !pinned(c.el));
+      if (rows.length) pool = rows;
+    }
+    let best = vertical ? pickInNextRow(from, pool, dir, fromEl) : pickBest(from, list, dir);
     // End of the visible part of a row: rather than stopping on the row's small arrow button, go on to the next
     // hidden card (select() then uses the arrow to bring it into view), like a TV app's rows.
     const isButton = best && (best.el.tagName === 'BUTTON' || best.el.getAttribute('role') === 'button');
@@ -354,10 +430,16 @@
       if (card) best = card;
     }
     if (best) {
+      stuck = 0;
       if (!vertical || anchorX === null || !fromEl) { const b = best.b; anchorX = (b.left + b.right) / 2; }
       select(best.el);
       return;
     }
+    // Held in a pop-up with nowhere to go that way, twice in a row: let go of it (a side panel that the site marks
+    // as a pop-up must not trap the highlight).
+    const pop = !document.fullscreenElement && openPopup();
+    if (pop && ++stuck >= 2) { stuck = 0; letGo.add(pop); note('let go of pop-up ' + describe(pop)); move(dir); return; }
+    note('nothing ' + dir + ' of ' + (fromEl ? describe(fromEl) : 'start') + ', ' + list.length + ' that way' + (pop ? ', in pop-up ' + describe(pop) : ''));
     // Nothing further that way: scroll the page instead (Up/Down), so more appears. (Not behind a pop-up.)
     if (vertical && !openPopup()) scrollBy({ top: (dir === 'down' ? 1 : -1) * innerHeight * 0.6, behavior: 'smooth' });
   }
@@ -444,6 +526,15 @@
     return best;
   }
 
+  // In a bar fixed to the screen (a site's header)?
+  function pinned(el) {
+    for (let p = el, i = 0; p && p !== document.body && i < 15; p = p.parentElement, i++) {
+      const pos = getComputedStyle(p).position;
+      if (pos === 'fixed' || pos === 'sticky') return true;
+    }
+    return false;
+  }
+
   function insideScroller(el) {
     for (let p = el.parentElement; p && p !== document.body; p = p.parentElement) {
       const cs = getComputedStyle(p);
@@ -464,6 +555,8 @@
     const b = el.getBoundingClientRect();
     const v = visibleBox(el);
     const clipped = v.width < b.width * 0.9;
+    // (Never in full screen: scrolling YouTube's player there slides its "more videos" grid up over the video.)
+    if (document.fullscreenElement) { drawRing(); return; }
     if (clipped || b.top < 60 || b.bottom > innerHeight - 40 || b.left < 0 || b.right > innerWidth) {
       el.scrollIntoView({ block: 'center', inline: clipped ? 'center' : 'nearest', behavior: 'smooth' });
     }
@@ -496,6 +589,10 @@
   let ignoreMouseUntil = 0;
   let beforeOk = null;          // what could be selected when OK was pressed, to spot a menu it opens
   function okPress(el) {
+    if (ROW_STOPS && el.matches(ROW_STOPS)) {
+      const play = el.querySelector('button[aria-label^="Play" i], button[aria-label^="Pause" i]');
+      if (play) { press(play); return; }
+    }
     beforeOk = { el, seen: new Set(candidates()) };
     setTimeout(() => followAfterOk(el), 450);
     const v = visibleBox(el);
@@ -511,6 +608,7 @@
     if (!real) { press(el); return; }
     ignoreMouseUntil = performance.now() + 1500;          // the click's own pointer movement
     window.tvnavClick(JSON.stringify({ x, y }));
+    setTimeout(parkPointer, 300);
   }
 
   // OK replaced what was highlighted with something new (a sub-menu, the next step of a form): the highlight
@@ -532,7 +630,7 @@
       if (d < dist) { dist = d; best = c; }
     }
     if (best) { beforeOk = { el: best, seen: beforeOk.seen }; select(best); }
-    else if (document.fullscreenElement) { usingKeys = false; current = null; drawRing(); }
+    else if (document.fullscreenElement) hideControls();
   }
 
   function press(el) {
@@ -555,12 +653,24 @@
   const OK_KEY = 'tvnav-ok-at';
   const userVideos = new WeakSet();
   let autoFsDoneFor = null, fullscreenByOk = false;
+  // OK counts as starting a video when it opened another page (a film's player) or was pressed on something to
+  // play ("Play", "Watch", an episode, the video itself), not on a menu or logo of a page with a trailer.
   function okRecently() {
-    let t = 0;
-    try { t = Number(sessionStorage.getItem(OK_KEY)) || 0; } catch (e) { /* storage blocked */ }
-    return Date.now() - t < 12000;
+    let ok = null;
+    try { ok = JSON.parse(sessionStorage.getItem(OK_KEY) || 'null'); } catch (e) { /* storage blocked */ }
+    if (!ok || typeof ok !== 'object' || Date.now() - ok.t >= 12000) return false;
+    return ok.play || ok.href !== location.href;
   }
-  function noteOk() { try { sessionStorage.setItem(OK_KEY, String(Date.now())); } catch (e) { /* storage blocked */ } }
+  const PLAYISH = /\b(play|watch|resume|continue|start|episode|ep\s?\d|live|stream|trailer)/i;
+  function playish(el) {
+    if (!el || !el.isConnected) return true;
+    if (el.tagName === 'VIDEO' || el.querySelector('video')) return true;
+    const text = (el.getAttribute('aria-label') || '') + ' ' + (el.title || '') + ' ' + (el.textContent || '').slice(0, 200);
+    return PLAYISH.test(text);
+  }
+  function noteOk(el) {
+    try { sessionStorage.setItem(OK_KEY, JSON.stringify({ t: Date.now(), href: location.href, play: playish(el) })); } catch (e) { /* storage blocked */ }
+  }
   function share(v) { const b = v.getBoundingClientRect(); return (b.width * b.height) / (innerWidth * innerHeight); }
   const yours = v => userVideos.has(v) || (document.fullscreenElement && document.fullscreenElement.contains(v));
   function bigPlayingVideo() {
@@ -647,11 +757,30 @@
         .filter(c => c.b.top > innerHeight * 0.6 && c.b.bottom <= innerHeight + 2);
       if (!bar.length && tries < 3) { controlsFromBottom(tries + 1); return; }
       if (!bar.length) { move('up'); return; }
-      const bottom = Math.max(...bar.map(c => c.b.bottom));
-      const row = bar.filter(c => c.b.bottom > bottom - 80).sort((a, b) => a.b.left - b.b.left);
+      // The lowest row with several buttons (the control bar), not a lone button under it (DStv's "Channel Lineup").
+      const rows = [];
+      for (const c of bar.sort((x, y) => y.b.bottom - x.b.bottom)) {
+        const r = rows.find(r => Math.abs(r[0].b.bottom - c.b.bottom) < 24);
+        if (r) r.push(c); else rows.push([c]);
+      }
+      const row = (rows.find(r => r.length >= 3) || rows[0]).sort((a, b) => a.b.left - b.b.left);
       anchorX = null;
       select(row[0].el);
     }, 300);
+  }
+  // Back to watching: highlight off, and the video back in its place (a scrolled full-screen player is YouTube's
+  // "more videos" grid, with the video squeezed to the top).
+  function hideControls() {
+    usingKeys = false; current = null; drawRing();
+    unscrollPlayer();
+  }
+  function unscrollPlayer() {
+    const fs = document.fullscreenElement;
+    if (!fs) return;
+    for (let p = fullscreenPlayer(); p; p = p.parentElement) {
+      if (p.scrollTop) p.scrollTop = 0;
+      if (p === fs) break;
+    }
   }
   // The highlight lives in the page; in full screen only the full-screen part is drawn, so it moves in there.
   document.addEventListener('fullscreenchange', () => {
@@ -665,7 +794,7 @@
 
   window.addEventListener('keydown', e => {
     if (e.ctrlKey || e.altKey || e.metaKey) return;
-    if (e.key === 'MediaPlayPause' || e.key === 'MediaPlay') { noteOk(); return; }   // started by you, too
+    if (e.key === 'MediaPlayPause' || e.key === 'MediaPlay') { noteOk(null); return; }   // started by you, too
     const active = document.activeElement;
     const typing = isTextBox(active);
     const dir = DIRS[e.key];
@@ -676,7 +805,7 @@
       if (e.repeat) return;                             // held: tv.ahk takes it home
       if (document.fullscreenElement) {
         // On the controls: hide them (back to watching). Watching: leave the video, back to where you came from.
-        if (usingKeys) { usingKeys = false; current = null; drawRing(); return; }
+        if (usingKeys) { hideControls(); return; }
         document.exitFullscreen().catch(() => {});
         if (fullscreenByOk && history.length > 1) history.back();
         fullscreenByOk = false;
@@ -688,14 +817,17 @@
 
     if (dir) {
       if (typing && (dir === 'left' || dir === 'right')) return;     // move the caret
+      if (nativePlayer() && !usingKeys && (dir === 'left' || dir === 'right')) return;   // Netflix seeks itself
       const watching = !usingKeys && (bigPlayingVideo() || (document.fullscreenElement && bigVideo()));
       // (not on live streams, which have no length to skip through)
       if (watching && isFinite(watching.duration) && (dir === 'left' || dir === 'right')) {
         e.preventDefault(); e.stopPropagation();
+        unscrollPlayer();
         watching.currentTime = Math.max(0, watching.currentTime + (dir === 'right' ? SEEK_SECONDS : -SEEK_SECONDS));
         return;
       }
       if (document.fullscreenElement && !usingKeys) {
+        unscrollPlayer();
         // Full screen: Up/Down (or Left/Right on a live stream) bring up the player's controls.
         e.preventDefault(); e.stopPropagation();
         controlsFromBottom();
@@ -703,12 +835,13 @@
       }
       e.preventDefault(); e.stopPropagation();
       if (typing) active.blur();
+      parkPointer();
       move(dir);
       return;
     }
 
     if (e.key === 'Enter' || e.key === 'NumpadEnter') {
-      noteOk();
+      noteOk(typing ? active : current && current.isConnected && usingKeys ? current : null);
       if (typing) { usingKeys = false; drawRing(); return; }        // submit the search box etc. as usual
       if (current && current.isConnected && usingKeys) {
         e.preventDefault(); e.stopPropagation();
@@ -716,6 +849,7 @@
         return;
       }
       const v = bigVideo();
+      if (v && nativePlayer() && (document.fullscreenElement || share(v) >= 0.85)) return;   // Netflix pauses itself
       if (v) {
         e.preventDefault(); e.stopPropagation();
         okOnVideo(v);

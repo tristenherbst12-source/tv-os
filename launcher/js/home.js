@@ -271,6 +271,22 @@
     setInterval(() => TV.races.load(onData).catch(() => {}), 6 * 3600e3);
   }
 
+  /* ---------- Now playing on Spotify (the window keeps running after Home) ---------- */
+  function drawNowPlaying() {
+    if (!TV.helper.available) return;
+    TV.helper.request('/now-playing').then(r => {
+      const np = r && r.nowPlaying, chip = $('npChip');
+      if (!np) { chip.hidden = true; return; }
+      if ($('npArt').getAttribute('src') !== (np.art || '')) $('npArt').setAttribute('src', np.art || '');
+      $('npText').innerHTML = '';
+      const t = document.createElement('span'); t.textContent = np.title;
+      const a = document.createElement('span'); a.className = 'artist'; a.textContent = np.artist ? ' · ' + np.artist : '';
+      $('npText').append(t, a);
+      chip.classList.toggle('paused', !np.playing);
+      chip.hidden = false;
+    }).catch(() => {});
+  }
+
   /* ---------- start ---------- */
   async function start() {
     cfg = await TV.config.loadAll();
@@ -292,6 +308,8 @@
     window.addEventListener('focus', () => { if (busy && !$('launch').classList.contains('error')) hideOverlay(); });
     document.body.classList.add('ready');
     startChip();
+    drawNowPlaying();
+    setInterval(drawNowPlaying, 5000);
   }
 
   start();

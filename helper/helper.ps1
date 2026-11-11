@@ -20,7 +20,8 @@
 #   GET  /volume, POST /volume      {level, muted}; POST takes level, delta and/or muted
 #   GET  /audio-output, POST /audio-output   playback devices; POST {id} makes one the default
 #   GET  /sleep-timer, POST /sleep-timer     POST {minutes (0 = off), action: sleep|shutdown}
-#   POST /screen-off                turn the display off now
+#   GET  /now-playing               what Spotify is playing (written by tvnav-host.ps1), or nowPlaying = null
+#   POST /screen-off               turn the display off now
 #   POST /power/{sleep|restart|shutdown}
 #   POST /open-settings/{wifi|bluetooth|sound}   open that Windows Settings page
 #   POST /restart-launcher
@@ -56,6 +57,39 @@ $CacheDir = Join-Path $TV.Data 'cache'
 if (-not (Test-Path $CacheDir)) { New-Item -ItemType Directory -Force $CacheDir | Out-Null }
 $SleepTimer = Read-JsonFile $SleepTimerFile       # {endsAt (ISO), action, minutes} or null; survives a helper restart
 $SettingsPages = @{ wifi = 'ms-settings:network-wifi'; bluetooth = 'ms-settings:bluetooth'; sound = 'ms-settings:sound' }
+$SettingsAumid = 'windows.immersivecontrolpanel_cw5n1h2txyewy!microsoft.windows.immersivecontrolpanel'
+
+# Opens a Windows Settings page in front of the TV window. Without the Windows desktop running, the ms-settings:
+# link can fail; then Settings is started directly (its main page), and for Bluetooth Windows' own "Add a
+# device" window is the last resort. Returns how it was opened, or $null.
+function Open-SettingsPage([string]$Page) {
+    $tried = @()
+    try { Start-Process $SettingsPages[$Page] -ErrorAction Stop; $via = 'link' }
+    catch { $tried += "link: $($_.Exception.Message)"; $via = $null }
+    if (-not $via) {
+        try { [void][TVHelper.Native]::Activate($SettingsAumid); $via = 'settings app' }
+        catch { $tried += "app: $($_.Exception.Message)" }
+    }
+    if ($via) {
+        # Bring the Settings window in front of the full-screen TV window.
+        for ($i = 0; $i -lt 30; $i++) {
+            Start-Sleep -Milliseconds 200
+            $w = Get-Process ApplicationFrameHost, SystemSettings -ErrorAction SilentlyContinue |
+                Where-Object { $_.MainWindowHandle -ne [IntPtr]::Zero -and $_.MainWindowTitle -match 'Settings|Einstellungen' } | Select-Object -First 1
+            if ($w) { [void][TVHelper.Native]::ForceForeground($w.MainWindowHandle); Log "settings ($Page) opened via $via"; return $via }
+        }
+        $tried += "$via started, but no Settings window appeared"
+    }
+    if ($Page -eq 'bluetooth') {
+        $wizard = Join-Path $env:windir 'System32\DevicePairingWizard.exe'
+        if (Test-Path $wizard) {
+            try { Start-Process $wizard -ErrorAction Stop; Log "settings (bluetooth): $($tried -join '; '); opened Add a device instead"; return 'add a device' }
+            catch { $tried += "wizard: $($_.Exception.Message)" }
+        }
+    }
+    Log "settings ($Page) could not be opened: $($tried -join '; ')"
+    return $null
+}
 
 function Get-Apps { Read-JsonFile (Join-Path $TV.Config 'apps.json') }
 function Get-Settings { Read-JsonFile (Join-Path $TV.Config 'settings.json') }
@@ -483,6 +517,16 @@ function Handle-Request {
             Send-Response $ctx 200 (Get-AudioOutputs); return
         }
 
+        '^GET /now-playing$' {
+            # Spotify's window reports every 10 s while it is open; an older file means it was closed.
+            $np = $null
+            $f = Join-Path $TV.Data 'now-playing.json'
+            if ((Test-Path $f) -and ((Get-Date) - (Get-Item $f).LastWriteTime).TotalSeconds -lt 30) {
+                try { $np = [IO.File]::ReadAllText($f) | ConvertFrom-Json } catch { }
+            }
+            if ($np -and -not $np.title) { $np = $null }
+            Send-Response $ctx 200 @{ nowPlaying = $np }; return
+        }
         '^GET /sleep-timer$'  { Send-Response $ctx 200 (Get-SleepTimerState); return }
         '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
 
@@ -496,8 +540,10 @@ function Handle-Request {
         }
 
         '^POST /open-settings/(wifi|bluetooth|sound)$' {
-            Start-Process $SettingsPages[$Matches[1]]
-            Send-Response $ctx 200 @{ ok = $true }; return
+            $via = Open-SettingsPage $Matches[1]
+            if ($via) { Send-Response $ctx 200 @{ ok = $true; via = $via } }
+            else { Send-Response $ctx 500 @{ error = 'could not open' } }
+            return
         }
 
         '^GET /desktop$' {

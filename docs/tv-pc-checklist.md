@@ -55,14 +55,22 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 - [ ] Plays in 1080p without stuttering (YouTube: H.264 is forced).
 - [ ] Home closes it and the home screen comes back.
 - [ ] Note any page where the highlight cannot reach something, or lands somewhere odd (site + what you pressed).
-- [ ] Spotify: keeps playing after Home; opening the tile again brings the same window back.
+- [ ] Netflix: the highlight never gets stuck on a card's pop-up preview, and each arrow moves one film. While
+      watching, Left/Right skip 10 s.
+- [ ] DStv: profiles, channels and cards can all be reached; in a channel, Down shows the control bar and Right
+      goes along it. Trailers on the home page do not jump to full screen.
+- [ ] Spotify: big enough to read; Down goes through the playlists on the left; in a playlist each song is one stop
+      and OK plays it.
+- [ ] Spotify: keeps playing after Home; the home screen shows the song (moving bars while playing, grey when
+      paused); opening the tile again brings the same window back.
 - [ ] Logins still there after a restart.
 
 ## Settings and power (real, not test mode)
 - [ ] **No "Test Mode" badge** in Settings or Power.
 - [ ] Network Speed Test gives sensible numbers.
 - [ ] Sound Output switches between the TV and Bluetooth headphones/soundbar.
-- [ ] Bluetooth: pairing page opens; Home comes back from it.
+- [ ] Wi-Fi and Bluetooth: the Settings page opens in front (Bluetooth may open Windows' "Add a device" instead);
+      Home comes back from it. If not, bring back `helper.log`.
 - [ ] Screen Off When Idle: the TV goes to standby, and a remote button wakes it.
 - [ ] Sleep: PC sleeps; a remote button wakes it straight to the home screen (no password).
 - [ ] Sleep timer (set 30 min) really sleeps / shuts down.

@@ -142,7 +142,21 @@ body:has(.launch.show) .blob,body:has(.modal.show) .blob{animation-play-state:pa
   font-size:calc(var(--u)*.9);font-weight:800;letter-spacing:.02em;color:#fff;background:var(--accent,#e10600)}
 .race-chip .when{color:var(--dim)}
 .race-chip.live .when{color:#ff8a9c;font-weight:650}
-.top .status-left{right:auto;left:0}
+.top .status-left{right:auto;left:0;flex-direction:column;align-items:flex-start}
+
+/* ---------- Now playing on Spotify (helper /now-playing) ---------- */
+.np-chip{color:var(--text);max-width:calc(var(--u)*34)}
+.np-chip img{width:calc(var(--u)*1.9);height:calc(var(--u)*1.9);border-radius:calc(var(--u)*.35);object-fit:cover;flex:none}
+.np-chip img:not([src]),.np-chip img[src=""]{display:none}
+.np-chip #npText{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.np-chip .artist{color:var(--dim)}
+.np-eq{display:inline-flex;align-items:flex-end;gap:calc(var(--u)*.12);height:calc(var(--u)*1);flex:none}
+.np-eq i{width:calc(var(--u)*.22);height:100%;border-radius:1px;background:#1ed760;transform-origin:bottom;animation:np-eq 1s ease-in-out infinite}
+.np-eq i:nth-child(2){animation-delay:-.4s}
+.np-eq i:nth-child(3){animation-delay:-.7s}
+@keyframes np-eq{0%,100%{transform:scaleY(.3)}50%{transform:scaleY(1)}}
+.np-chip.paused .np-eq i{animation:none;transform:scaleY(.3);background:var(--dim)}
+body.lite .np-eq i{animation:none}
 
 /* Pointer hidden while the remote buttons are in use (js/keys.js) */
 body.pointer-idle,body.pointer-idle *{cursor:none!important}

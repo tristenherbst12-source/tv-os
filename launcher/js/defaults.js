@@ -54,7 +54,7 @@ window.TV_DEFAULTS = {
     "spotify": {
       "name": "Spotify", "sub": "Music", "accent": "#1ed760", "glyph": "music",
       "icon": "icons/spotify.png", "iconBg": "#000000", "iconPackage": "SpotifyAB.SpotifyMusic",
-      "launch": { "type": "edge-app", "url": "https://open.spotify.com/", "profile": "spotify", "scale": 1.25 },
+      "launch": { "type": "edge-app", "url": "https://open.spotify.com/", "profile": "spotify", "scale": 1.5 },
       "onHome": "minimize"
     },
     "browser": {

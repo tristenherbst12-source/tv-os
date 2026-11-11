@@ -309,3 +309,37 @@ pickers, Netflix rows, Disney+ rows, DStv channels) could not be tried here.
   choose yourself stays.
 - Back in full screen: first hides the controls, then leaves full screen and goes back a page.
 - Not working yet: Twitch's settings menu (Twitch hides its control layer, menu included, right after a click).
+
+## Stage 6, round 3 (11 Nov 2026, night): first mini PC test of the apps
+
+Feedback from the mini PC, and what changed (tested on the dev PC; DStv and Spotify signed in):
+
+- **YouTube full screen:** selecting the bottom controls scrolled the player box, which YouTube treats as "open
+  the More videos grid" (video squeezed to the top, stuck there). The highlight no longer scrolls anything in full
+  screen, and Back / hiding the controls / seeking put a scrolled player back (`unscrollPlayer`).
+- **Netflix:** the card under the (hidden) pointer popped up its preview, which covered its neighbours (so arrows
+  skipped a film) and trapped the highlight (it is a `role=dialog`). On Netflix every arrow press now moves the
+  page's pointer off the page (`parkPointer`), and hover previews are never treated as pop-ups. In Netflix's player
+  Left/Right and OK go to Netflix itself (it seeks 10 s and pauses on its own, and refuses outside seeking).
+  Not testable here without a Netflix sign-in.
+- **DStv:** profiles, channels and cards are plain boxes with a click handler (no links or buttons), so only "Add
+  Profile" was reachable: the "stuck on the right" bug. New rule: the outermost box with a hand pointer and no
+  visible link/button inside is a stop (`pointerBoxes`). In the player, the controls open on the main bar (the
+  lowest row with 3+ buttons), not on the lone "Channel Lineup" button under it. Up no longer jumps to the menu bar
+  pinned at the top while there are rows above.
+- **Trailers:** OK on a logo of a page with a trailer counted as "you started a video" and sent the trailer full
+  screen. OK now counts only if it opened another page or was on something like Play / Watch / an episode.
+- **Spotify:** scale 125% -> 150%. Library rows (see-through click areas over the row, `clickLayer`) and song rows
+  (one stop each, OK plays: `ROW_STOPS`) work; things half hidden under the player bar are no longer "covered".
+- **Spotify on the home screen:** `inject/spotify.js` reads Spotify's media-session info; tvnav-host.ps1 writes it to
+  `%LOCALAPPDATA%\TVLauncher\now-playing.json`; the helper serves it at `GET /now-playing` (only while the file is
+  fresh: the page reports every 10 s); the home screen shows a chip (cover, song, artist; bars move while playing).
+- **Pop-up safety net:** when the highlight is held in a pop-up and a direction has nowhere to go twice in a row, it
+  lets go of that pop-up. Moves that find nothing are written to `tvnav-host.log` (`tvnavLog`) for diagnosis.
+- **Wi-Fi / Bluetooth settings:** "could not open" on the TV. Settings is now tried by its link, then started
+  directly, then brought in front of the TV window; Bluetooth falls back to Windows' "Add a device" window. The
+  real error is written to `helper.log`. Not tested on the TV yet (needs the PC without the Windows desktop).
+
+### Turning the PC on with the remote
+The remote's USB receiver can wake the PC from Sleep, but from Shut Down only if the BIOS has a "wake from USB /
+keyboard in S5" option (to check on the M73: Power menu). Sleep draws about 1-2 W, similar to the TV's standby.

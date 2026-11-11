@@ -17,6 +17,7 @@ param([Parameter(Mandatory)][int]$Port, [switch]$H264, [string]$Name = 'app', [s
 
 . (Join-Path $PSScriptRoot 'common.ps1')
 $LogFile = Join-Path $TV.Logs 'tvnav-host.log'
+$NowPlayingFile = Join-Path $TV.Data 'now-playing.json'
 function Log([string]$m) {
     try { Add-Content -Path $LogFile -Value "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))  [$Name] $m" -Encoding UTF8 } catch { }
 }
@@ -24,7 +25,8 @@ function Log([string]$m) {
 # Read as plain text: Get-Content attaches file details to the string, which ConvertTo-Json would then serialise
 # too (very slowly).
 function Read-Text([string]$Rel) { return [IO.File]::ReadAllText((Join-Path $TV.Root $Rel), [Text.Encoding]::UTF8) }
-$Source = (Read-Text 'inject\tvnav.js') + "`n" + (Read-Text 'inject\youtube.js')     # youtube.js only acts on YouTube
+# (youtube.js and spotify.js each act only on their own site)
+$Source = (Read-Text 'inject\tvnav.js') + "`n" + (Read-Text 'inject\youtube.js') + "`n" + (Read-Text 'inject\spotify.js')
 if ($H264) { $Source = (Read-Text 'inject\h264only.js') + "`n" + $Source }
 
 # ---------- wait for the window's Edge to open its debugging port ----------
@@ -76,6 +78,8 @@ function Set-UpPage([string]$Session) {
     Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = $Source } $Session
     Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavClick' } $Session
     Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavGesture' } $Session
+    Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavLog' } $Session          # notes for this log (where the highlight got stuck)
+    Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavNowPlaying' } $Session   # what Spotify is playing, for the home screen
     Send-Cdp 'Runtime.enable' @{} $Session
     Send-Cdp 'Runtime.evaluate' @{ expression = $Source } $Session          # the page that is already open
     Send-Cdp 'Runtime.runIfWaitingForDebugger' @{} $Session
@@ -120,6 +124,11 @@ try {
                     else {
                         Send-Cdp 'Runtime.evaluate' @{ expression = 'window.__tvnavGesture && window.__tvnavGesture()'; userGesture = $true } $m.sessionId
                     }
+                }
+                elseif ($m.params.name -eq 'tvnavLog') { $t = [string]$m.params.payload; Log $t.Substring(0, [Math]::Min(400, $t.Length)) }
+                elseif ($m.params.name -eq 'tvnavNowPlaying') {
+                    # Spotify's song (title, artist, picture, playing): kept in a file the helper hands to the home screen.
+                    try { [IO.File]::WriteAllText($NowPlayingFile, [string]$m.params.payload, (New-Object Text.UTF8Encoding $false)) } catch { }
                 }
                 elseif ($m.params.name -eq 'tvnavClick') {
                     try {

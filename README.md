@@ -117,10 +117,13 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
   an embedded frame (F1TV) need the touchpad, once.
 - **YouTube** plays at 1080p by itself (choose another quality from the gear if you like; that choice stays).
   Twitch's own settings menu needs the touchpad for now; its other controls work with the remote.
-- **Spotify** keeps playing when you press Home; the other apps close.
+- **Spotify** keeps playing when you press Home (the other apps close), and the home screen shows the song that is
+  playing. In Spotify, each song in a list is one stop: OK plays it.
+- **Netflix** handles its own player: Left/Right skip 10 s, OK pauses.
 - **Settings** has the volume, sound output, sleep timer, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
-- **Power** has Sleep, Restart and Shut Down. Any button on the remote wakes the PC from Sleep.
+- **Power** has Sleep, Restart and Shut Down. Any button on the remote wakes the PC from Sleep; from Shut Down it
+  usually cannot (see build-notes), so Sleep is the TV-style standby.
 
 ## Getting to the Windows desktop
 
@@ -157,6 +160,8 @@ settings stay as they are.
 - **A tile says "App Not Installed":** install that app from the Store (step 3).
 - **Everything is slow or stutters:** press L or turn on Settings > Lite Mode.
 - **Logs:** `C:\Users\TV\AppData\Local\TVLauncher\logs` (`helper.log`, `start.log`, and `tvnav-host.log` for the
-  remote navigation inside the apps).
+  remote navigation inside the apps: it notes where an arrow found nowhere to go).
+- **Wi-Fi or Bluetooth settings do not open:** `helper.log` says why. To join a Wi-Fi network once, you can also use
+  Settings > Windows Desktop and the network icon there, then restart.
 - **Trying it on another PC without changing it:** `scripts\start.cmd -Windowed` runs it in a window in test mode
   (Sleep, Restart and Shut Down only pretend).
