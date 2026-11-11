@@ -46,7 +46,12 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       does nothing.
 - [ ] OK opens what it is on (Prime Video cards, profile button and its menu too), Back goes back a page.
 - [ ] Trailers that play by themselves (Prime, Netflix banners) do not take over Left/Right.
-- [ ] Playing a video: Left/Right skip 10 s, OK goes full screen then pauses, Back leaves full screen.
+- [ ] **Opening a video (OK) goes straight to full screen** (no side list of videos). Left/Right skip 10 s, OK
+      pauses/plays.
+- [ ] In full screen, Down shows the controls with the highlight on Pause; Right reaches the gear; OK, Up, OK opens
+      Quality with the highlight in the list; choosing one goes back to watching. Back hides the controls; Back
+      again leaves the video, back to where you came from.
+- [ ] YouTube plays at 1080p by itself (gear > Quality shows 1080p).
 - [ ] Plays in 1080p without stuttering (YouTube: H.264 is forced).
 - [ ] Home closes it and the home screen comes back.
 - [ ] Note any page where the highlight cannot reach something, or lands somewhere odd (site + what you pressed).

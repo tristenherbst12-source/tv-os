@@ -105,9 +105,9 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 |---|---|---|
 | Arrows | Move between tiles | Move the highlight: Left/Right along a row, Up/Down to the next row (keeping the column) |
 | OK | Open | Press the highlighted thing |
-| Back | Back to the home screen | Back a page (or out of full screen); **hold** it to go home |
+| Back | Back to the home screen | Back a page; **hold** it to go home |
 | Home | – | Back to the home screen |
-| While watching | | Left/Right skip 10 s (not on live streams); OK makes the video full screen, then pauses/plays |
+| Watching a video | | Opens full screen. Left/Right skip 10 s (not on live streams), OK pauses/plays, Up/Down show the player's controls (gear, quality, subtitles) with the highlight on them, Back hides them, Back again leaves the video |
 | Volume | A small volume bar shows the level | Same |
 | Play/Pause | Works in the apps | |
 | L (keyboard) | Lite Mode on/off (less animation, if the PC struggles) | |
@@ -115,6 +115,8 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 - The pointer disappears while you use the buttons; touch the touchpad and it comes back.
 - A pop-up (cookie choices, a profile menu) keeps the highlight inside it until it closes. Cookie pop-ups shown in
   an embedded frame (F1TV) need the touchpad, once.
+- **YouTube** plays at 1080p by itself (choose another quality from the gear if you like; that choice stays).
+  Twitch's own settings menu needs the touchpad for now; its other controls work with the remote.
 - **Spotify** keeps playing when you press Home; the other apps close.
 - **Settings** has the volume, sound output, sleep timer, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.

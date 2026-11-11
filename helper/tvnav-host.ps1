@@ -1,10 +1,13 @@
 # Remote navigation for one TV window (started by helper.ps1 next to each app window, ends when the window closes).
 #
 # Connects to the window's Edge over its local debugging port and:
-#   - adds inject\tvnav.js (arrows / OK / Back) to every page, and inject\h264only.js where asked for (YouTube);
+#   - adds inject\tvnav.js (arrows / OK / Back) and inject\youtube.js (1080p) to every page, and
+#     inject\h264only.js where asked for (YouTube);
 #   - turns the remote's OK into a real click inside the page (the page calls window.tvnavClick, this script then
 #     sends a genuine mouse click at that spot). Sites that ignore made-up clicks (Prime Video) respond to these,
 #     and the real pointer never moves.
+#   - runs steps only a user action may do (full screen when a video you opened starts) when the page calls
+#     window.tvnavGesture.
 #
 # Why not an Edge extension: Edge switches extensions loaded with --load-extension off from the second start of a
 # profile, and the switch that prevented that stopped working with Edge 157.0.4341.46 (11 Nov 2026).
@@ -21,7 +24,7 @@ function Log([string]$m) {
 # Read as plain text: Get-Content attaches file details to the string, which ConvertTo-Json would then serialise
 # too (very slowly).
 function Read-Text([string]$Rel) { return [IO.File]::ReadAllText((Join-Path $TV.Root $Rel), [Text.Encoding]::UTF8) }
-$Source = Read-Text 'inject\tvnav.js'
+$Source = (Read-Text 'inject\tvnav.js') + "`n" + (Read-Text 'inject\youtube.js')     # youtube.js only acts on YouTube
 if ($H264) { $Source = (Read-Text 'inject\h264only.js') + "`n" + $Source }
 
 # ---------- wait for the window's Edge to open its debugging port ----------
@@ -72,6 +75,7 @@ function Set-UpPage([string]$Session) {
     Send-Cdp 'Page.enable' @{} $Session
     Send-Cdp 'Page.addScriptToEvaluateOnNewDocument' @{ source = $Source } $Session
     Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavClick' } $Session
+    Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavGesture' } $Session
     Send-Cdp 'Runtime.enable' @{} $Session
     Send-Cdp 'Runtime.evaluate' @{ expression = $Source } $Session          # the page that is already open
     Send-Cdp 'Runtime.runIfWaitingForDebugger' @{} $Session
@@ -104,10 +108,26 @@ try {
             }
             'Target.targetDestroyed' { $Attached.Remove($m.params.targetId) }
             'Runtime.bindingCalled' {
-                if ($m.params.name -eq 'tvnavClick') {
+                if ($m.params.name -eq 'tvnavGesture') {
+                    # The page asks for something only a user action may do (full screen): either a real key press
+                    # ("key:f", the players' own full-screen key) or its prepared step, run as a user action.
+                    if ($m.params.payload -match '^key:(\w)$') {
+                        $k = $Matches[1]; $code = [int][char]$k.ToUpper()
+                        $kb = @{ key = $k; code = "Key$($k.ToUpper())"; windowsVirtualKeyCode = $code; nativeVirtualKeyCode = $code }
+                        Send-Cdp 'Input.dispatchKeyEvent' ($kb + @{ type = 'keyDown'; text = $k }) $m.sessionId
+                        Send-Cdp 'Input.dispatchKeyEvent' ($kb + @{ type = 'keyUp' }) $m.sessionId
+                    }
+                    else {
+                        Send-Cdp 'Runtime.evaluate' @{ expression = 'window.__tvnavGesture && window.__tvnavGesture()'; userGesture = $true } $m.sessionId
+                    }
+                }
+                elseif ($m.params.name -eq 'tvnavClick') {
                     try {
                         $p = $m.params.payload | ConvertFrom-Json
-                        Send-Click $m.sessionId ([double]$p.x) ([double]$p.y)
+                        if ($p.move) {       # just move the page's pointer there (players show their controls)
+                            Send-Cdp 'Input.dispatchMouseEvent' @{ type = 'mouseMoved'; x = [double]$p.x; y = [double]$p.y; button = 'none'; pointerType = 'mouse' } $m.sessionId
+                        }
+                        else { Send-Click $m.sessionId ([double]$p.x) ([double]$p.y) }
                     } catch { Log "click failed: $($_.Exception.Message)" }
                 }
             }

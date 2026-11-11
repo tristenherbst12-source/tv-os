@@ -112,6 +112,16 @@
       if (!inside || tiles.has(el)) continue;
       if (el.getBoundingClientRect().width >= vw * 0.9 || (inside >= 2 && !/^(A|BUTTON|INPUT|SELECT|TEXTAREA)$/.test(el.tagName))) out.splice(i, 1);
     }
+    // Full screen: only the player's own controls (the rest of the page is not showing). YouTube's "more videos"
+    // arrow is left out: just highlighting it slides a panel over the video.
+    // (Only the player box: YouTube's full screen also holds the description and comments below it.)
+    if (document.fullscreenElement) {
+      // (plus an open menu wherever the site draws it: Twitch puts its settings menu outside the player)
+      const root = fullscreenPlayer();
+      return out.filter(el => (root.contains(el) || el.closest('[role="menu"], [role="listbox"], [role="dialog"]')) &&
+        document.fullscreenElement.contains(el) && !/^more videos/i.test(el.getAttribute('aria-label') || '') &&
+        !el.closest('[class*="caption-window" i], [class*="captions" i]'));     // (subtitle text is not a button)
+    }
     // A pop-up is open (cookie choices, a sign-in box): stay inside it until it closes, as a TV does.
     const pop = openPopup();
     if (pop) {
@@ -164,9 +174,17 @@
     return found.length ? found[found.length - 1] : null;      // the last one in the page is usually on top
   }
 
-  // The tile a small link sits in, if any: a box up to 5 levels up with a pointer cursor and a picture, clearly
-  // bigger than the link (3x) but not a whole panel.
+  // The tile a small link sits in, if any: a box up to 5 levels up with a pointer cursor and a big picture,
+  // clearly bigger than the link (3x) but not a whole panel.
   const tileCache = new WeakMap();
+  // A picture covering at least a third of the box (cover art, not a channel's little round picture).
+  function bigPicture(box, boxArea) {
+    for (const im of box.querySelectorAll('img, picture, canvas, video, [style*="background-image"]')) {
+      const r = im.getBoundingClientRect();
+      if (r.width * r.height >= boxArea / 3) return true;
+    }
+    return false;
+  }
   function tileAround(el) {
     if (tileCache.has(el)) return tileCache.get(el);
     let found = null;
@@ -176,8 +194,7 @@
       for (let i = 0; p && i < 5 && p !== document.body; i++, p = p.parentElement) {
         const b = p.getBoundingClientRect(), pa = b.width * b.height;
         if (pa > innerWidth * innerHeight * 0.3 || b.width > innerWidth * 0.6) break;
-        if (pa >= area * 3 && getComputedStyle(p).cursor === 'pointer' &&
-            p.querySelector('img, picture, canvas, video, [style*="background-image"]')) { found = p; }
+        if (pa >= area * 3 && getComputedStyle(p).cursor === 'pointer' && bigPicture(p, pa)) { found = p; }
       }
     }
     tileCache.set(el, found);
@@ -221,9 +238,18 @@
 
   /* Hidden under something else (another layer, a pop-up) at its middle. Things under a fixed or sticky bar
      (the site's header) still count: selecting them scrolls them out from under it. */
+  // Where OK should click an element: a point where it really is on top (not always its middle: the bottom of
+  // YouTube's settings menu lies over the progress bar's hover area).
+  const clickPoints = new WeakMap();
   function covered(el, b) {
     const x = b.left + b.width / 2, y = b.top + b.height / 2;
     if (x < 0 || y < 0 || x >= innerWidth || y >= innerHeight) return false;   // off screen: cannot tell
+    clickPoints.delete(el);
+    for (const [fx, fy] of [[0.5, 0.5], [0.5, 0.25], [0.25, 0.5], [0.75, 0.5], [0.5, 0.75]]) {
+      const px = b.left + b.width * fx, py = b.top + b.height * fy;
+      const h = document.elementFromPoint(px, py);
+      if (h && (h === el || el.contains(h))) { clickPoints.set(el, { fx, fy }); return false; }
+    }
     const hit = document.elementFromPoint(x, y);
     if (!hit || hit === el || el.contains(hit) || hit === ring) return false;
     // A text box under its own floating label (Netflix's sign-in) is not covered.
@@ -471,9 +497,12 @@
   let beforeOk = null;          // what could be selected when OK was pressed, to spot a menu it opens
   function okPress(el) {
     beforeOk = { el, seen: new Set(candidates()) };
+    setTimeout(() => followAfterOk(el), 450);
     const v = visibleBox(el);
-    const x = (Math.max(v.left, 0) + Math.min(v.right, innerWidth)) / 2;
-    const y = (Math.max(v.top, 0) + Math.min(v.bottom, innerHeight)) / 2;
+    const l = Math.max(v.left, 0), r = Math.min(v.right, innerWidth), t = Math.max(v.top, 0), btm = Math.min(v.bottom, innerHeight);
+    covered(el, el.getBoundingClientRect());               // finds the point where it is on top
+    const pt = clickPoints.get(el) || { fx: 0.5, fy: 0.5 };
+    const x = l + (r - l) * pt.fx, y = t + (btm - t) * pt.fy;
     const hit = document.elementFromPoint(x, y);
     // Only when the highlighted thing really is what lies under that point (otherwise the click would land on
     // whatever covers it).
@@ -482,6 +511,28 @@
     if (!real) { press(el); return; }
     ignoreMouseUntil = performance.now() + 1500;          // the click's own pointer movement
     window.tvnavClick(JSON.stringify({ x, y }));
+  }
+
+  // OK replaced what was highlighted with something new (a sub-menu, the next step of a form): the highlight
+  // goes to the nearest new item, as on a TV, instead of being left on nothing.
+  function followAfterOk(el) {
+    if (current !== el || !beforeOk || beforeOk.el !== el) return;
+    const b = el.isConnected ? el.getBoundingClientRect() : null;
+    if (b && b.width > 1 && b.height > 1 && el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
+    const from = lastBox || { left: 0, top: 0, right: 0, bottom: 0 };
+    const fx = (from.left + from.right) / 2, fy = (from.top + from.bottom) / 2;
+    let best = null, dist = Infinity;
+    // In a full-screen player only into a menu (YouTube's settings and their sub-menus); after choosing in one
+    // (a quality), back to watching, as on a TV.
+    const fsMenu = c => !document.fullscreenElement || /^(menuitem|menuitemradio|menuitemcheckbox|option|radio)$/.test(c.getAttribute('role') || '');
+    for (const c of candidates()) {
+      if (beforeOk.seen.has(c) || !fsMenu(c)) continue;
+      const r = c.getBoundingClientRect();
+      const d = Math.hypot((r.left + r.right) / 2 - fx, (r.top + r.bottom) / 2 - fy);
+      if (d < dist) { dist = d; best = c; }
+    }
+    if (best) { beforeOk = { el: best, seen: beforeOk.seen }; select(best); }
+    else if (document.fullscreenElement) { usingKeys = false; current = null; drawRing(); }
   }
 
   function press(el) {
@@ -503,6 +554,7 @@
   const BIG = 0.25;
   const OK_KEY = 'tvnav-ok-at';
   const userVideos = new WeakSet();
+  let autoFsDoneFor = null, fullscreenByOk = false;
   function okRecently() {
     let t = 0;
     try { t = Number(sessionStorage.getItem(OK_KEY)) || 0; } catch (e) { /* storage blocked */ }
@@ -524,15 +576,89 @@
     }
     return null;
   }
-  // OK while watching: full screen if the video does not fill the window yet, otherwise pause / play.
-  function okOnVideo(v) {
-    if (!document.fullscreenElement && share(v) < 0.85) {
-      const player = v.closest('#movie_player, [class*="player" i], [id*="player" i]') || v.parentElement || v;
-      (player.requestFullscreen ? player.requestFullscreen() : Promise.reject()).catch(() => { if (v.paused) v.play(); else v.pause(); });
-      return;
+  /* Full screen the way the site's own button does it (YouTube's and Twitch's players lay themselves out for it),
+     else the player box itself. Browsers only allow full screen from a real key press or click, which a video
+     starting a moment after OK no longer counts as, so helper	vnav-host.ps1 runs it as a user action
+     (window.tvnavGesture). */
+  const FS_BUTTONS = '.ytp-fullscreen-button, [data-a-target="player-fullscreen-button"], ' +
+    'button[aria-label*="full screen" i], button[aria-label*="fullscreen" i], button[title*="full screen" i], button[title*="fullscreen" i]';
+  function playerOf(v) {
+    return v.closest('#movie_player, .html5-video-player, [data-a-target="video-player"], [class*="player" i], [id*="player" i]') || v.parentElement || v;
+  }
+  // In full screen: the player of the biggest video inside it, else the full-screen element itself.
+  function fullscreenPlayer() {
+    const fs = document.fullscreenElement;
+    let big = null, area = 0;
+    for (const v of fs.querySelectorAll('video')) {
+      const r = v.getBoundingClientRect();
+      if (r.width * r.height > area) { area = r.width * r.height; big = v; }
     }
+    const pl = big && playerOf(big);
+    return pl && fs.contains(pl) ? pl : fs;
+  }
+  function goFullscreen(v) {
+    if (document.fullscreenElement) return;
+    const player = playerOf(v);
+    const scope = player.parentElement || document;
+    const btn = [...scope.querySelectorAll(FS_BUTTONS)].find(b => !/exit/i.test((b.getAttribute('aria-label') || '') + (b.title || '')));
+    window.__tvnavGesture = () => {
+      if (document.fullscreenElement) return;
+      if (btn && btn.isConnected) btn.click();
+      else if (player.requestFullscreen) player.requestFullscreen().catch(() => {});
+    };
+    if (typeof window.tvnavGesture !== 'function') { window.__tvnavGesture(); return; }
+    // First the player's own full-screen key (F on YouTube, Twitch, Netflix, Prime Video, Disney+), pressed for
+    // real, so the player switches to its own full-screen layout; if nothing happens, its button.
+    if (!isTextBox(document.activeElement)) { try { document.activeElement.blur(); } catch (e) { /* ignore */ } }
+    window.tvnavGesture('key:f');
+    setTimeout(() => { if (!document.fullscreenElement) window.tvnavGesture('fullscreen'); }, 900);
+  }
+  // OK while watching: full screen if it is not yet, otherwise pause / play.
+  function okOnVideo(v) {
+    if (!document.fullscreenElement && share(v) < 0.85) { goFullscreen(v); return; }
     if (v.paused) v.play().catch(() => {}); else v.pause();
   }
+
+  /* Full screen: Up/Down show the player's controls with the highlight on them (bottom row first), so settings
+     such as quality are reachable. The controls are kept showing while the highlight is on them. */
+  // Players only show their controls for real pointer movement, so the companion moves the page's pointer a
+  // little over the player (the real pointer stays where it is). Without it: a made-up movement.
+  let jiggle = 0;
+  function showControls() {
+    const fs = document.fullscreenElement;
+    if (!fs) return;
+    // Onto the highlighted control (moving away from an open menu closes it on Twitch), else the middle.
+    const onCtl = current && current.isConnected && fs.contains(current);
+    const b = (onCtl ? current : fullscreenPlayer()).getBoundingClientRect();
+    const x = b.left + b.width / 2 + (jiggle = 1 - jiggle) * 2;
+    const y = onCtl ? b.top + b.height / 2 : b.top + Math.min(b.height, innerHeight) * 0.55;
+    ignoreMouseUntil = performance.now() + 800;
+    if (typeof window.tvnavClick === 'function') { window.tvnavClick(JSON.stringify({ x, y, move: true })); return; }
+    const opts = { bubbles: true, clientX: x, clientY: y, view: window };
+    (document.elementFromPoint(x, y) || fs).dispatchEvent(new MouseEvent('mousemove', opts));
+  }
+  setInterval(() => { if (usingKeys && document.fullscreenElement) showControls(); }, 1500);
+  // Bottom control row, leftmost first (Play), once the controls have faded in.
+  function controlsFromBottom(tries = 0) {
+    showControls();
+    current = null;
+    setTimeout(() => {
+      const bar = candidates().map(el => ({ el, b: el.getBoundingClientRect() }))
+        .filter(c => c.b.top > innerHeight * 0.6 && c.b.bottom <= innerHeight + 2);
+      if (!bar.length && tries < 3) { controlsFromBottom(tries + 1); return; }
+      if (!bar.length) { move('up'); return; }
+      const bottom = Math.max(...bar.map(c => c.b.bottom));
+      const row = bar.filter(c => c.b.bottom > bottom - 80).sort((a, b) => a.b.left - b.b.left);
+      anchorX = null;
+      select(row[0].el);
+    }, 300);
+  }
+  // The highlight lives in the page; in full screen only the full-screen part is drawn, so it moves in there.
+  document.addEventListener('fullscreenchange', () => {
+    const r = ensureRing();
+    (document.fullscreenElement || document.body || document.documentElement).appendChild(r);
+    if (!document.fullscreenElement) { usingKeys = false; drawRing(); }
+  });
 
   /* ---------- keys ---------- */
   const DIRS = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right' };
@@ -548,7 +674,14 @@
       if (typing) return;                               // delete a character, as usual
       e.preventDefault(); e.stopPropagation();
       if (e.repeat) return;                             // held: tv.ahk takes it home
-      if (document.fullscreenElement) { document.exitFullscreen().catch(() => {}); return; }
+      if (document.fullscreenElement) {
+        // On the controls: hide them (back to watching). Watching: leave the video, back to where you came from.
+        if (usingKeys) { usingKeys = false; current = null; drawRing(); return; }
+        document.exitFullscreen().catch(() => {});
+        if (fullscreenByOk && history.length > 1) history.back();
+        fullscreenByOk = false;
+        return;
+      }
       if (history.length > 1) history.back();
       return;
     }
@@ -562,9 +695,11 @@
         watching.currentTime = Math.max(0, watching.currentTime + (dir === 'right' ? SEEK_SECONDS : -SEEK_SECONDS));
         return;
       }
-      if (watching && document.fullscreenElement) {
-        // Full screen: Up/Down leave it first, so the highlight has the page to move around in.
-        document.exitFullscreen().catch(() => {});
+      if (document.fullscreenElement && !usingKeys) {
+        // Full screen: Up/Down (or Left/Right on a live stream) bring up the player's controls.
+        e.preventDefault(); e.stopPropagation();
+        controlsFromBottom();
+        return;
       }
       e.preventDefault(); e.stopPropagation();
       if (typing) active.blur();
@@ -602,6 +737,15 @@
     const v = e.target;
     if (!(v instanceof HTMLVideoElement)) return;
     if (okRecently() || (document.fullscreenElement && document.fullscreenElement.contains(v))) userVideos.add(v);
-    if (share(v) > BIG && userVideos.has(v)) { usingKeys = false; drawRing(); }
+    if (share(v) > BIG && userVideos.has(v)) {
+      usingKeys = false; drawRing();
+      // Opened with OK: straight to full screen, as a TV app plays a video (once per page, so leaving full
+      // screen yourself sticks).
+      if (okRecently() && !document.fullscreenElement && autoFsDoneFor !== location.href) {
+        autoFsDoneFor = location.href;
+        fullscreenByOk = true;
+        setTimeout(() => { if (!v.paused) goFullscreen(v); }, 400);
+      }
+    }
   }, true);
 })();

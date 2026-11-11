@@ -292,3 +292,20 @@ Disney+, DStv and F1TV
 
 Not covered: cookie pop-ups inside a cross-site frame (F1TV's) need the touchpad once. Signed-in pages (profile
 pickers, Netflix rows, Disney+ rows, DStv channels) could not be tried here.
+
+### Watching videos like a TV (11 Nov 2026, later)
+- Opening a video with OK goes straight to full screen. The companion presses the player's own full-screen key
+  (F, a real key press via `Input.dispatchKeyEvent`) so YouTube switches to its own full-screen layout; requesting
+  full screen on the page instead left YouTube's normal page (side list of videos) on a full-screen window. If F
+  does nothing, the site's full-screen button is clicked as a user action (`Runtime.evaluate` with `userGesture`).
+- In full screen the stops are the player's controls plus any open menu; Up/Down show the controls (a real
+  pointer move inside the page; players ignore made-up ones) with the highlight on the bottom row, leftmost first.
+  The page's pointer is kept on the highlighted control so the controls and menus stay open.
+- When OK replaces the highlighted item (a sub-menu), the highlight moves to the nearest new item; in full screen
+  only into menu items, otherwise back to watching (after choosing a quality).
+- OK clicks where an item is really on top (the bottom of YouTube's settings menu lies over the progress bar's hover
+  area, so its middle would have clicked the progress bar).
+- `inject/youtube.js` sets 1080p (or the best below it) once per video through the player's own API; a quality you
+  choose yourself stays.
+- Back in full screen: first hides the controls, then leaves full screen and goes back a page.
+- Not working yet: Twitch's settings menu (Twitch hides its control layer, menu included, right after a click).
