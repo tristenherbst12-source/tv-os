@@ -129,6 +129,7 @@ window.TV_DEFAULTS = {
     "lite":  false,
     "sleepAction":  "sleep",
     "screenOffMinutes":  0,
+    "screensaverMinutes":  5,
     "desktopPin":  null,
     "helperPort":  8765
 },

@@ -297,6 +297,9 @@
         await TV.config.saveSettings({ sleepAction: v });
         if (timer.active) setTimer(Math.max(1, Math.ceil((timerEndsAt - Date.now()) / 60000)));
       } });
+    segRow({ name: 'Screensaver', hint: 'Photos, Time and Music on the Home Screen (Home Starts It Too)', accent: '#8a6cff',
+      labels: ['Off', '2 Min', '5 Min', '10 Min', '15 Min'], values: [0, 2, 5, 10, 15], value: s.screensaverMinutes == null ? 5 : s.screensaverMinutes,
+      onChange: v => TV.config.saveSettings({ screensaverMinutes: v }) });
     segRow({ name: 'Screen Off When Idle', hint: 'Only on the Home Screen', accent: '#8a6cff',
       labels: ['Off', '5 Min', '10 Min', '15 Min', '30 Min'], values: [0, 5, 10, 15, 30], value: s.screenOffMinutes || 0,
       onChange: v => TV.config.saveSettings({ screenOffMinutes: v }) });

@@ -150,6 +150,15 @@ if (Want 'power') {
     Invoke-Change 'USB selective suspend off (keeps the remote''s USB receiver awake)' {
         & powercfg.exe /setacvalueindex SCHEME_MIN 2a737441-1930-4402-8d77-b2bebba308a3 48e6b7a6-50f5-4782-a5d4-53bb8f07e226 0
     }
+    # The remote's receiver shows up as several devices (keyboard for the arrows, mouse for the touchpad, consumer /
+    # system control for media and power buttons). Each may wake the PC from Sleep only when Windows allows it.
+    $wakeable = @(& powercfg.exe /devicequery wake_programmable | Where-Object { $_ -match 'keyboard|mouse|consumer control|system controller' })
+    $armed = @(& powercfg.exe /devicequery wake_armed)
+    if (-not $wakeable) { Write-Warn 'no keyboard or remote found that could wake the PC from Sleep: plug in the remote''s receiver and run setup again' }
+    foreach ($d in $wakeable) {
+        if ($armed -contains $d) { Write-Ok "may wake the PC: $d" }
+        else { Invoke-Change "let '$d' wake the PC from Sleep (remote buttons)" { & powercfg.exe /deviceenablewake $d }.GetNewClosure() }
+    }
     Invoke-Change 'no password after waking from sleep' { & powercfg.exe /setacvalueindex SCHEME_MIN SUB_NONE CONSOLELOCK 0 }
     Invoke-Change 'apply the plan again' { & powercfg.exe /setactive SCHEME_MIN }
     $hib = Get-RegValue "$HKLM\SYSTEM\CurrentControlSet\Control\Power" 'HibernateEnabled'

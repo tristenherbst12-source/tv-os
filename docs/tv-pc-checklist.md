@@ -55,7 +55,8 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 - [ ] Plays in 1080p without stuttering (YouTube: H.264 is forced).
 - [ ] Home closes it and the home screen comes back.
 - [ ] Note any page where the highlight cannot reach something, or lands somewhere odd (site + what you pressed).
-- [ ] Netflix: the highlight never gets stuck on a card's pop-up preview, and each arrow moves one film. While
+- [ ] Netflix: the highlight never gets stuck on a card's pop-up preview, and each arrow moves one film. Right
+      at the end of the screen pages the row on; Left on a row's first film does nothing (no jump to the end). While
       watching, Left/Right skip 10 s.
 - [ ] DStv: profiles, channels and cards can all be reached; in a channel, Down shows the control bar and Right
       goes along it. Trailers on the home page do not jump to full screen.
@@ -65,6 +66,12 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       paused); opening the tile again brings the same window back.
 - [ ] Logins still there after a restart.
 
+## Screensaver
+- [ ] Home on the home screen starts it: photos, time, date (and the Spotify song while one plays). Any button
+      ends it, and that button does nothing else.
+- [ ] Left alone on the home screen for 5 minutes: it starts by itself. It never starts while an app is open.
+- [ ] Settings > Screensaver changes the time or turns it off.
+
 ## Settings and power (real, not test mode)
 - [ ] **No "Test Mode" badge** in Settings or Power.
 - [ ] Network Speed Test gives sensible numbers.
@@ -72,7 +79,10 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 - [ ] Wi-Fi and Bluetooth: the Settings page opens in front (Bluetooth may open Windows' "Add a device" instead);
       Home comes back from it. If not, bring back `helper.log`.
 - [ ] Screen Off When Idle: the TV goes to standby, and a remote button wakes it.
-- [ ] Sleep: PC sleeps; a remote button wakes it straight to the home screen (no password).
+- [ ] Sleep: PC sleeps; a remote button wakes it straight to the home screen (no password). Run setup (step 5)
+      again first: it now lists each remote device as "may wake the PC". If the remote still cannot wake it, check
+      the BIOS (F1 at start): Power > "Enhanced Power Saving Mode" off, and any "USB wake" option on. After a
+      wake, `powercfg /lastwake` in PowerShell shows what woke it.
 - [ ] Sleep timer (set 30 min) really sleeps / shuts down.
 - [ ] Restart and Shut Down work.
 - [ ] **Desktop PIN: set one with the remote, then Windows Desktop with the same PIN opens the desktop.** If it

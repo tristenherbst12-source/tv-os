@@ -192,8 +192,12 @@
       case 'down':  if (fr < grid.length - 1) setFocus(fr + 1, mapCol(fc, fr, fr + 1)); break;
       case 'up':    if (fr > 0) setFocus(fr - 1, mapCol(fc, fr, fr - 1)); break;
       case 'ok':    launch(rows[fr][fc]); break;
-      case 'back':
-      case 'home':  hideOverlay(); setFocus(0, 0); break;
+      case 'back':  hideOverlay(); setFocus(0, 0); break;
+      // Home on the home screen: the screensaver, as on a TV (or, while an app is opening, back to the tiles).
+      case 'home':
+        if ($('launch').classList.contains('show')) { hideOverlay(); setFocus(0, 0); }
+        else TV.screensaver.start();
+        break;
       case 'lite':  setLite(!cfg.settings.lite, true); break;
       default: return;
     }
@@ -222,10 +226,15 @@
   let lastInput = Date.now(), screenOffSent = false;
   function noteInput() { lastInput = Date.now(); screenOffSent = false; }
   function checkIdle() {
+    if (document.visibilityState !== 'visible' || !document.hasFocus()) { lastInput = Date.now(); return; }   // an app is in front
+    const idle = Date.now() - lastInput;
+    // Screensaver after settings.screensaverMinutes (default 5) untouched on the home screen. Never over an app:
+    // while one is in front, the home screen has no focus and the idle time keeps restarting (above).
+    const saver = cfg.settings.screensaverMinutes == null ? 5 : Number(cfg.settings.screensaverMinutes) || 0;
+    if (saver && idle >= saver * 60000 && !TV.screensaver.active && !$('launch').classList.contains('show')) TV.screensaver.start();
     const mins = Number(cfg.settings.screenOffMinutes) || 0;
     if (!mins || screenOffSent || !TV.helper.available) return;
-    if (document.visibilityState !== 'visible' || !document.hasFocus()) { lastInput = Date.now(); return; }   // an app is in front
-    if (Date.now() - lastInput < mins * 60000) return;
+    if (idle < mins * 60000) return;
     screenOffSent = true;
     TV.helper.request('/screen-off', { method: 'POST' }).catch(() => { screenOffSent = false; });
   }
@@ -302,6 +311,7 @@
     ['keydown', 'mousemove', 'mousedown', 'wheel'].forEach(t => window.addEventListener(t, noteInput, { passive: true }));
     window.addEventListener('focus', noteInput);
     setInterval(checkIdle, 10000);
+    TV.screensaver.onStop = noteInput;     // the button that ends it counts as use (it never reaches noteInput)
     await resolveIcons(cfg.apps.apps || {});
     build();
     document.addEventListener('keydown', onKey);

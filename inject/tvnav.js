@@ -87,6 +87,8 @@
       // (aria-hidden is not a reason to skip: sites hide duplicate links such as video thumbnails from screen
       // readers, and those are exactly what a TV remote should land on.)
       if (el.disabled) continue;
+      // Netflix's row arrows are not stops: Right at the end of the screen pages the row on by itself.
+      if (NETFLIX && (/(^|\s)handle/.test(String(el.className)) || /^see (more|previous) titles/i.test(el.getAttribute('aria-label') || ''))) continue;
       const b = el.getBoundingClientRect();
       if (b.width < 12 || b.height < 12) continue;
       // Whole rows or panels made focusable (Spotify does this) are containers, not things to press.
@@ -410,6 +412,11 @@
         if (!insideScroller(el) && !sameRow) continue;
         box = v.full;
       }
+      // Netflix: cards peeking in at a row's edge are not stops, except to page the row on (Right), or back to
+      // where it started (Left). Its rows wrap round, so Left on the first card would jump to the row's end.
+      if (NETFLIX && v.width < v.full.width * 0.9) {
+        if (vertical || (dir === 'left' && !((rowPages.get(rowKey(el)) || 0) > 0))) continue;
+      }
       if (score(from, box, dir) === Infinity) continue;
       list.push({ el, b: box, hidden: box === v.full });
     }
@@ -564,6 +571,10 @@
     drawRing();
   }
 
+  // How many pages a row has been moved on (by revealInCarousel), so Left never wraps past its start.
+  const rowPages = new WeakMap();
+  function rowKey(el) { return el.closest('.lolomoRow, .rowContainer, [data-list-context], .slider') || el.parentElement; }
+
   /* A carousel that moves its cards itself (no scrolling): press its own next/previous arrow until the card shows. */
   function revealInCarousel(el, tries = 0) {
     if (current !== el || tries > 6) return;
@@ -577,6 +588,8 @@
         words.test((x.getAttribute('aria-label') || '') + ' ' + (x.title || '') + ' ' + x.className) && !x.contains(el));
       if (btn) {
         press(btn);
+        const key = rowKey(el);
+        rowPages.set(key, (rowPages.get(key) || 0) + (right ? 1 : -1));
         setTimeout(() => revealInCarousel(el, tries + 1), 500);
         return;
       }

@@ -343,3 +343,22 @@ Feedback from the mini PC, and what changed (tested on the dev PC; DStv and Spot
 ### Turning the PC on with the remote
 The remote's USB receiver can wake the PC from Sleep, but from Shut Down only if the BIOS has a "wake from USB /
 keyboard in S5" option (to check on the M73: Power menu). Sleep draws about 1-2 W, similar to the TV's standby.
+
+## Stage 6, round 4 (12 Nov 2026)
+
+- **Netflix (from a video of the TV):** Left on a row's first film paged the row backwards, and Netflix rows wrap
+  round, so it jumped to the row's end; the highlight also landed on half-hidden "peek" cards and the row arrows.
+  On Netflix the row arrows are no longer stops, peeking cards are stops only to page a row on (Right) or back to
+  where it started (Left; pages are counted per row), and Up/Down only land on fully visible cards. Not testable
+  here: the Netflix Store app is an Edge web app in the everyday Edge profile, Edge refuses a debugging port on
+  the default profile, and its cookies use app-bound encryption, so a copied profile is signed out.
+- **Waking from Sleep with the remote:** Windows lets only "armed" devices wake the PC. Setup step 5 now arms every
+  keyboard, mouse, consumer-control and system-controller device (`powercfg /deviceenablewake`), which covers the
+  remote's arrows, touchpad and media/power buttons. If it still does not wake, the BIOS is next (Enhanced Power
+  Saving Mode cuts USB power in sleep on some ThinkCentres).
+- **Screensaver** (`launcher/js/screensaver.js`): Home on the home screen, or `screensaverMinutes` (default 5,
+  Settings > Screensaver) untouched there. home.js only counts idle time while the home screen has focus, so it
+  never starts over an app. Photos: Wikimedia Commons featured pictures of mountains, lakes, waterfalls, beaches,
+  forests, sunsets and landscapes (wide ones only, about 300), fetched by the page (Commons allows `origin=*`) at
+  most once a day and kept in localStorage; credited on screen. Time, date and the Spotify song (helper
+  `/now-playing`). Any key ends it and is swallowed; real pointer movement too.

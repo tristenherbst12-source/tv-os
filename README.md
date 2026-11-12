@@ -76,7 +76,7 @@ Type `SETUP` when it asks, and the `TV` account's Windows password when it asks 
    apps are never touched.
 4. Windows Update: only restarts between 02:00 and 08:00, never in the evening.
 5. Power: never sleeps on its own (the launcher's own Screen Off setting handles the screen), keeps the remote's USB
-   receiver awake, no password after waking, hibernation off.
+   receiver awake and lets its buttons wake the PC from Sleep, no password after waking, hibernation off.
 6. Signs in to `TV` automatically. It always asks for the password (just press Enter if the account has none),
    checks it, and stores it encrypted by Windows, not as plain text. Automatic sign-in is only switched on once the
    password is right.
@@ -106,7 +106,7 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 | Arrows | Move between tiles | Move the highlight: Left/Right along a row, Up/Down to the next row (keeping the column) |
 | OK | Open | Press the highlighted thing |
 | Back | Back to the home screen | Back a page; **hold** it to go home |
-| Home | – | Back to the home screen |
+| Home | Screensaver (photos, time, music); any button ends it | Back to the home screen |
 | Watching a video | | Opens full screen. Left/Right skip 10 s (not on live streams), OK pauses/plays, Up/Down show the player's controls (gear, quality, subtitles) with the highlight on them, Back hides them, Back again leaves the video |
 | Volume | A small volume bar shows the level | Same |
 | Play/Pause | Works in the apps | |
@@ -120,7 +120,10 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 - **Spotify** keeps playing when you press Home (the other apps close), and the home screen shows the song that is
   playing. In Spotify, each song in a list is one stop: OK plays it.
 - **Netflix** handles its own player: Left/Right skip 10 s, OK pauses.
-- **Settings** has the volume, sound output, sleep timer, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
+- **Screensaver:** after 5 minutes untouched on the home screen (never while an app is open), or when you press
+  Home on the home screen: nature photos (Wikimedia Commons, credited on screen) with the time, date and the song
+  Spotify is playing. Any button ends it. Settings > Screensaver changes the time or turns it off.
+- **Settings** has the volume, sound output, sleep timer, screensaver, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
 - **Power** has Sleep, Restart and Shut Down. Any button on the remote wakes the PC from Sleep; from Shut Down it
   usually cannot (see build-notes), so Sleep is the TV-style standby.

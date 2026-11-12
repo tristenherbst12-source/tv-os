@@ -168,3 +168,29 @@ body.pointer-idle,body.pointer-idle *{cursor:none!important}
 .tile.off{opacity:0;pointer-events:none}
 .rows .row-view + .label{margin-top:calc(var(--u)*3)}
 body.lite .row.big.slide{transition:none}
+
+/* ---------- Screensaver (js/screensaver.js): photos drifting slowly, time, date and music ---------- */
+.saver{position:fixed;inset:0;z-index:50;background:var(--bg,#05070d);opacity:0;visibility:hidden;transition:opacity 1.2s ease,visibility 0s linear 1.2s;overflow:hidden;cursor:none}
+.saver.show{opacity:1;visibility:visible;transition:opacity 1.2s ease}
+.ss-photo{position:absolute;inset:0;background:center/cover no-repeat;opacity:0;transition:opacity 2.5s ease;will-change:opacity,transform}
+.ss-photo.on{opacity:1}
+.ss-photo.drift{animation:ss-drift 30s linear forwards}
+@keyframes ss-drift{from{transform:scale(1.02)}to{transform:scale(1.1) translate(-1.2%,-.8%)}}
+body.lite .ss-photo.drift{animation:none}
+.ss-shade{position:absolute;inset:0;background:linear-gradient(to top,rgba(0,0,0,.55) 0%,rgba(0,0,0,0) 38%),linear-gradient(to bottom,rgba(0,0,0,.25) 0%,rgba(0,0,0,0) 18%)}
+.ss-when{position:absolute;left:calc(var(--u)*4.5);bottom:calc(var(--u)*4);color:#fff;text-shadow:0 2px 18px rgba(0,0,0,.45)}
+.ss-time{font-family:"InterV",sans-serif;font-size:calc(var(--u)*8);font-weight:700;line-height:1;letter-spacing:-.04em;font-variant-numeric:tabular-nums}
+.ss-date{font-size:calc(var(--u)*1.9);margin-top:calc(var(--u)*.8);opacity:.92}
+.ss-music{position:absolute;right:calc(var(--u)*4.5);bottom:calc(var(--u)*4.4);display:flex;align-items:center;gap:calc(var(--u)*1.2);
+  padding:calc(var(--u)*.9) calc(var(--u)*1.6) calc(var(--u)*.9) calc(var(--u)*.9);border-radius:calc(var(--u)*1.4);
+  background:rgba(0,0,0,.35);color:#fff;max-width:calc(var(--u)*40)}
+.ss-music img{width:calc(var(--u)*4.6);height:calc(var(--u)*4.6);border-radius:calc(var(--u)*.7);object-fit:cover;flex:none}
+.ss-music img:not([src]),.ss-music img[src=""]{display:none}
+.ss-music > div{min-width:0}
+.ss-song{font-size:calc(var(--u)*1.6);font-weight:650;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ss-artist{font-size:calc(var(--u)*1.25);opacity:.8;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ss-music .np-eq{height:calc(var(--u)*1.4)}
+.ss-music.paused .np-eq i{animation:none;transform:scaleY(.3);background:rgba(255,255,255,.6)}
+.ss-credit{position:absolute;right:calc(var(--u)*1.6);top:calc(var(--u)*1.2);font-size:calc(var(--u)*.85);color:rgba(255,255,255,.6);text-shadow:0 1px 6px rgba(0,0,0,.6)}
+/* The home screen's own animation pauses underneath (nothing of it shows). */
+body.saver-on .blob{animation-play-state:paused}

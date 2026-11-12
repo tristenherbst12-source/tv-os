@@ -46,6 +46,15 @@
 
 <div class="launch" id="launch"><div class="box"><div class="icon" id="lIcon"></div><div class="txt" id="lTxt"></div><div class="msg" id="lMsg"></div><div class="spin"></div></div></div>
 
+<!-- Screensaver (js/screensaver.js) -->
+<div class="saver" id="saver" aria-hidden="true">
+  <div class="ss-photo"></div><div class="ss-photo"></div>
+  <div class="ss-shade"></div>
+  <div class="ss-when"><div class="ss-time" id="ssTime"></div><div class="ss-date" id="ssDate"></div></div>
+  <div class="ss-music" id="ssMusic" hidden><img id="ssArt" alt=""><div><div class="ss-song" id="ssSong"></div><div class="ss-artist" id="ssArtist"></div></div><span class="np-eq"><i></i><i></i><i></i></span></div>
+  <div class="ss-credit" id="ssCredit"></div>
+</div>
+
 <!-- Written at install time (port + token). Missing in a plain browser, which is fine. -->
 <script src="js/helper-token.js"></script>
 <script src="js/defaults.js"></script>
@@ -55,6 +64,7 @@
 <script src="js/config.js"></script>
 <script src="js/keys.js"></script>
 <script src="js/races.js"></script>
+<script src="js/screensaver.js"></script>
 <script src="js/home.js"></script>
 </body>
 </html>
