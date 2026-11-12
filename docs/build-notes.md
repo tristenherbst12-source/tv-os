@@ -377,3 +377,19 @@ Netflix's new layout (cards are `a[href="/browse?jbv=<id>"]` in `section.carouse
   for playing videos now catches it, and OK > Play goes straight to full screen. Trailers in panels never count.
 - Verified: rows (Right one film at a time with paging, Left back, Left on the first film stops), panel, Resume >
   full screen, Left/Right skip 10 s (Netflix's own), OK pauses, Back returns to the panel.
+
+## Stage 6, round 5 (12 Nov 2026): Continue Watching, volume pop-up, DStv logo
+- **Continue Watching:** tvnav.js reports a video you started (`followWatching`) every 30 s and when it pauses or
+  ends: title (media session, Netflix's player title, the page title, or the card OK was pressed on), picture
+  (media session, YouTube thumbnail, the card's picture, og:image), the page (YouTube with `t=`; Netflix without its
+  tracking), position and length; done at 95 %. tvnav-host.ps1 keeps the latest per app in
+  `%LOCALAPPDATA%\TVLauncher\continue\<profile>.json` (removed when done). The helper's `GET /continue` maps
+  profiles to apps (same site only, up to 3 weeks old); `POST /launch/{app}` with `{url}` opens the app there (same
+  site only) and starts its companion with `-Resume`, which marks the first video as started by you (full screen,
+  skipping). Home shows the row under Watch and Listen only when there is something, with a smaller clock and no
+  key hints so everything fits; it refreshes when the home screen comes back. Tested on this PC with YouTube
+  (resumed at the same second); Netflix/DStv cards tested with sample entries.
+- **Volume pop-up** (tv.ahk): a dark pill at the top centre (clear of subtitles), speaker icon by level (Segoe MDL2
+  Assets), slim white bar, the number; fades in/out.
+- **DStv logo:** dstv.stream's favicon is a plain cyan shape; `icons/dstv.svg` is the DStv mark cropped (viewBox
+  only) from the site's own logo file. `iconKeep` stops setup's icon step replacing it.

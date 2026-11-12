@@ -13,11 +13,14 @@
 # profile, and the switch that prevented that stopped working with Edge 157.0.4341.46 (11 Nov 2026).
 #
 #   powershell -File helper\tvnav-host.ps1 -Port 9310 [-H264] [-Name youtube]
-param([Parameter(Mandatory)][int]$Port, [switch]$H264, [string]$Name = 'app', [switch]$Trace)
+param([Parameter(Mandatory)][int]$Port, [switch]$H264, [string]$Name = 'app', [switch]$Trace, [switch]$Resume)
 
 . (Join-Path $PSScriptRoot 'common.ps1')
 $LogFile = Join-Path $TV.Logs 'tvnav-host.log'
 $NowPlayingFile = Join-Path $TV.Data 'now-playing.json'
+$WatchedDir = Join-Path $TV.Data 'continue'
+if (-not (Test-Path $WatchedDir)) { New-Item -ItemType Directory -Force $WatchedDir | Out-Null }
+$WatchedFile = Join-Path $WatchedDir "$Name.json"
 function Log([string]$m) {
     try { Add-Content -Path $LogFile -Value "$((Get-Date).ToString('yyyy-MM-dd HH:mm:ss'))  [$Name] $m" -Encoding UTF8 } catch { }
 }
@@ -28,6 +31,12 @@ function Read-Text([string]$Rel) { return [IO.File]::ReadAllText((Join-Path $TV.
 # (youtube.js and spotify.js each act only on their own site)
 $Source = (Read-Text 'inject\tvnav.js') + "`n" + (Read-Text 'inject\youtube.js') + "`n" + (Read-Text 'inject\spotify.js')
 if ($H264) { $Source = (Read-Text 'inject\h264only.js') + "`n" + $Source }
+# Opened from Continue Watching: the video on the first page counts as one you started with OK (full screen,
+# Left/Right skip). Once per window: the mark lives in the tab's session storage.
+if ($Resume) {
+    $Source = "try { if (!sessionStorage.getItem('tvnav-resumed')) { sessionStorage.setItem('tvnav-resumed', '1'); " +
+        "sessionStorage.setItem('tvnav-ok-at', JSON.stringify({ t: Date.now() + 60000, href: '', play: true })); } } catch (e) {}`n" + $Source
+}
 
 # ---------- wait for the window's Edge to open its debugging port ----------
 $wsUrl = $null
@@ -80,6 +89,7 @@ function Set-UpPage([string]$Session) {
     Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavGesture' } $Session
     Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavLog' } $Session          # notes for this log (where the highlight got stuck)
     Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavNowPlaying' } $Session   # what Spotify is playing, for the home screen
+    Send-Cdp 'Runtime.addBinding' @{ name = 'tvnavWatched' } $Session      # what you watch, for Continue Watching
     Send-Cdp 'Runtime.enable' @{} $Session
     Send-Cdp 'Runtime.evaluate' @{ expression = $Source } $Session          # the page that is already open
     Send-Cdp 'Runtime.runIfWaitingForDebugger' @{} $Session
@@ -126,6 +136,15 @@ try {
                     }
                 }
                 elseif ($m.params.name -eq 'tvnavLog') { $t = [string]$m.params.payload; Log $t.Substring(0, [Math]::Min(400, $t.Length)) }
+                elseif ($m.params.name -eq 'tvnavWatched') {
+                    # The latest video watched in this app, for the home screen's Continue Watching row (one file per
+                    # app; finished videos are removed).
+                    try {
+                        $w = [string]$m.params.payload | ConvertFrom-Json
+                        if ($w.done) { Remove-Item $WatchedFile -ErrorAction SilentlyContinue }
+                        elseif ($w.url -and $w.title) { [IO.File]::WriteAllText($WatchedFile, [string]$m.params.payload, (New-Object Text.UTF8Encoding $false)) }
+                    } catch { Log "watched: $($_.Exception.Message)" }
+                }
                 elseif ($m.params.name -eq 'tvnavNowPlaying') {
                     # Spotify's song (title, artist, picture, playing): kept in a file the helper hands to the home screen.
                     try { [IO.File]::WriteAllText($NowPlayingFile, [string]$m.params.payload, (New-Object Text.UTF8Encoding $false)) } catch { }

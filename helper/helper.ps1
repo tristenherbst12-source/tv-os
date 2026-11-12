@@ -13,7 +13,8 @@
 #   GET  /config/{apps|keymap|settings|wec-schedule}
 #   POST /settings                  merge a JSON object into config/settings.json
 #   GET  /cache/{name}, POST /cache/{name}   offline copy of downloaded data (the F1 calendar)
-#   POST /launch/{appId}            open an app from config/apps.json
+#   POST /launch/{appId}            open an app from config/apps.json; body {url} opens it at that page (same site only)
+#   GET  /continue                  the latest video watched in each app (Continue Watching), newest first
 #   POST /home                      tv.ahk asks what to do with the window in front (close / minimize)
 #   GET  /keys?since=N, POST /keys  keys seen by tv.ahk, for the key-test page
 #   GET  /status                    uptime, storage, version, network, bluetooth
@@ -156,6 +157,7 @@ function Start-EdgeWindow {
     # Remote navigation (arrows / OK / Back) in every TV window; H.264 only where asked for (Haswell has no VP9).
     $hostArgs = "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$(Join-Path $PSScriptRoot 'tvnav-host.ps1')`" -Port $port -Name $ProfileName"
     if ($l.forceH264) { $hostArgs += ' -H264' }
+    if ($l.resume) { $hostArgs += ' -Resume' }
     Start-Process powershell.exe -ArgumentList $hostArgs -WindowStyle Hidden | Out-Null
     # If this profile was already running, Edge hands the request over and this process exits at once.
     $h = Wait-MainWindow $p.Id 10
@@ -167,12 +169,44 @@ function Start-EdgeWindow {
     return 'started'
 }
 
+# Same site? (Continue Watching may only open pages of the app's own site.) Compares the last two parts of the
+# host name, so www.netflix.com and netflix.com match, and so do dstv.stream and now.dstv.stream.
+function Test-SameSite([string]$A, [string]$B) {
+    try {
+        $site = { param($u) (([Uri]$u).Host -split '\.' | Select-Object -Last 2) -join '.' }
+        return ([Uri]$A).Scheme -eq 'https' -and (& $site $A) -eq (& $site $B)
+    } catch { return $false }
+}
+
+# The latest video watched in each app (written by tvnav-host.ps1), newest first, for the home screen.
+function Get-ContinueWatching {
+    $dir = Join-Path $TV.Data 'continue'
+    if (-not (Test-Path $dir)) { return @() }
+    $apps = Get-Apps
+    $items = foreach ($f in Get-ChildItem $dir -Filter *.json) {
+        if (((Get-Date) - $f.LastWriteTime).TotalDays -gt 21) { continue }      # old: not "continue" any more
+        try { $w = [IO.File]::ReadAllText($f.FullName) | ConvertFrom-Json } catch { continue }
+        $profileName = $f.BaseName
+        $id = $apps.apps.PSObject.Properties | Where-Object { $_.Value.launch.profile -eq $profileName } | Select-Object -First 1 -ExpandProperty Name
+        if (-not $id -or -not $w.url -or -not (Test-SameSite $w.url $apps.apps.$id.launch.url)) { continue }
+        [pscustomobject]@{ app = $id; title = $w.title; sub = $w.sub; art = $w.art; url = $w.url; live = [bool]$w.live
+                           position = $w.position; duration = $w.duration; at = $w.at }
+    }
+    return @($items | Sort-Object at -Descending)
+}
+
 function Invoke-Launch {
-    param([string]$Id)
+    param([string]$Id, [string]$Url = '')
     $apps = Get-Apps
     $a = $apps.apps.$Id
     if (-not $a) { return @{ status = 404; body = @{ error = 'unknown app'; app = $Id } } }
     $l = $a.launch
+    # Continue Watching: open the app at that page instead of its start page (only pages of its own site).
+    if ($Url -and $l.type -in 'edge-app', 'edge') {
+        if (-not (Test-SameSite $Url $l.url)) { return @{ status = 400; body = @{ error = 'not this app''s site'; app = $Id } } }
+        $l = $l.PSObject.Copy(); $l.url = $Url
+        $l | Add-Member -NotePropertyName resume -NotePropertyValue $true -Force      # the video there counts as started by you
+    }
     switch ($l.type) {
         'store' {
             $aumid = $l.aumid
@@ -475,9 +509,12 @@ function Handle-Request {
             Send-Response $ctx 204 $null; return
         }
 
+        '^GET /continue$' { Send-Response $ctx 200 @{ items = @(Get-ContinueWatching) }; return }
         '^POST /launch/([\w-]+)$' {
             $id = $Matches[1]
-            $r = Invoke-Launch $id
+            $b = $null
+            if ($ctx.Request.HasEntityBody) { try { $b = Read-Body $ctx } catch { } }
+            $r = Invoke-Launch $id $(if ($b -and $b.url) { [string]$b.url } else { '' })
             if ($r.status -eq 200) { $script:LastLaunched = $id }
             Send-Response $ctx $r.status $r.body; return
         }

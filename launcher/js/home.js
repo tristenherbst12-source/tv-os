@@ -9,6 +9,8 @@
 
   const VISIBLE_BIG = 6;                // big tiles on screen at once (the approved layout)
   let cfg, grid = [], rows = [], rowEls = [], firstShown = [], fr = 0, fc = 0, busy = false;
+  let continueItems = [];               // Continue Watching (helper /continue), shown under the first row
+  const CONTINUE_MAX = 4;
 
   /* ---------- icons: real file if it loads, otherwise the glyph ---------- */
   function probe(src, ms) {
@@ -50,7 +52,11 @@
     const host = $('rows');
     host.innerHTML = '';
     grid = []; rows = []; rowEls = []; firstShown = [];
-    (cfg.apps.rows || []).forEach(row => {
+    const rowDefs = (cfg.apps.rows || []).slice();
+    if (continueItems.length && rowDefs.length) rowDefs.splice(1, 0, { label: 'Continue Watching', continue: true });
+    document.body.classList.toggle('has-continue', !!continueItems.length);
+    rowDefs.forEach(row => {
+      if (row.continue) { buildContinueRow(host, row); return; }
       const apps = (row.apps || []).map(id => Object.assign({ id }, cfg.apps.apps[id])).filter(a => a.name);
       if (!apps.length) return;
       const r = grid.length;
@@ -95,16 +101,88 @@
         return t;
       }));
       rows.push(apps);
+      // A sliding row starts showing its first tiles (the rest hidden until the focus moves along it).
+      if (slides) grid[r].forEach((t, i) => t.classList.toggle('off', i >= VISIBLE_BIG));
     });
     fr = 0; fc = 0;
     if (!grid.length) return;
-    let last = null;
-    try { last = sessionStorage.getItem(FOCUS_KEY); } catch (e) { /* storage blocked */ }
+    let last = keepFocus;
+    keepFocus = null;
+    if (!last) try { last = sessionStorage.getItem(FOCUS_KEY); } catch (e) { /* storage blocked */ }
     for (let r = 0; r < rows.length; r++) {
       const c = rows[r].findIndex(a => a.id === last);
       if (c >= 0) { setFocus(r, c); return; }
     }
     setFocus(0, 0);
+  }
+
+  /* Continue Watching: the latest video in each app (picture, title, time left). OK opens the app right there. */
+  function buildContinueRow(host, row) {
+    const r = grid.length;
+    const label = document.createElement('div');
+    label.className = 'label minor';
+    label.textContent = row.label;
+    const el = document.createElement('div');
+    el.className = 'row small cont';
+    const items = continueItems.slice(0, CONTINUE_MAX);
+    el.style.setProperty('--cols', items.length);
+    host.append(label, el);
+    rowEls.push(null); firstShown.push(0);
+    const apps = items.map(it => {
+      const app = cfg.apps.apps[it.app] || {};
+      return { id: 'continue:' + it.app, name: it.title, accent: app.accent, _continue: it, _app: Object.assign({ id: it.app }, app) };
+    });
+    grid.push(apps.map((a, c) => {
+      const it = a._continue;
+      const t = document.createElement('div');
+      t.className = 'tile';
+      t.style.setProperty('--accent', a.accent || '#8a8fb3');
+      const th = document.createElement('div');
+      th.className = 'thumb';
+      if (it.art) {
+        const img = document.createElement('img');
+        img.alt = ''; img.src = it.art;
+        img.onerror = () => { img.remove(); th.classList.add('none'); };
+        th.appendChild(img);
+      } else th.classList.add('none');
+      const badge = document.createElement('div');
+      badge.className = 'icon';
+      iconHTML(a._app, badge);
+      th.appendChild(badge);
+      if (!it.live && it.duration > 0) {
+        const bar = document.createElement('div');
+        bar.className = 'progress';
+        bar.style.setProperty('--p', Math.min(100, Math.round(100 * it.position / it.duration)) + '%');
+        th.appendChild(bar);
+      }
+      const text = document.createElement('div');
+      text.className = 'text';
+      text.innerHTML = '<div class="name"></div><div class="sub"></div>';
+      text.firstChild.textContent = it.title;
+      const left = it.live ? 'Live' : it.duration > 0 ? Math.max(1, Math.round((it.duration - it.position) / 60)) + ' Min Left' : '';
+      text.lastChild.textContent = [left || a._app.name, it.sub].filter(Boolean).join(' · ');
+      t.append(th, text);
+      TV.onHover(t, () => setFocus(r, c));
+      t.addEventListener('click', () => { setFocus(r, c); launch(a); });
+      el.appendChild(t);
+      return t;
+    }));
+    rows.push(apps);
+  }
+
+  // Asks the helper what can be continued; rebuilds the rows when that changed (keeping the focused tile).
+  let keepFocus = null;
+  async function refreshContinue() {
+    if (!TV.helper.available) return;
+    let items = [];
+    try { items = ((await TV.helper.request('/continue')) || {}).items || []; } catch (e) { return; }
+    items = items.filter(it => cfg.apps.apps[it.app]);
+    if (JSON.stringify(items) === JSON.stringify(continueItems)) return;
+    continueItems = items;
+    if (grid.length) {
+      keepFocus = rows[fr] && rows[fr][fc] && rows[fr][fc].id;
+      build();
+    }
   }
 
   function setFocus(r, c) {
@@ -149,6 +227,14 @@
     if (busy) return;
     busy = true;
     try { sessionStorage.setItem(FOCUS_KEY, a.id); } catch (e) { /* storage blocked */ }
+    if (a._continue) {
+      // Continue Watching: the app, opened at the page that was playing.
+      overlay(a._app, a._continue.title, 'Opening ' + a._app.name);
+      if (!TV.helper.available) { setTimeout(hideOverlay, 1600); return; }
+      try { await TV.helper.launch(a._app.id, a._continue.url); setTimeout(hideOverlay, 2500); }
+      catch (e) { overlay(a._app, 'Could Not Open ' + a._app.name, e.status ? 'Something Went Wrong (' + e.status + ')' : 'Helper Not Responding', true); setTimeout(hideOverlay, 2200); }
+      return;
+    }
     const type = a.launch && a.launch.type;
 
     if (type === 'page') {
@@ -313,7 +399,10 @@
     setInterval(checkIdle, 10000);
     TV.screensaver.onStop = noteInput;     // the button that ends it counts as use (it never reaches noteInput)
     await resolveIcons(cfg.apps.apps || {});
+    await Promise.race([refreshContinue(), new Promise(r => setTimeout(r, 1500))]);
     build();
+    window.addEventListener('focus', () => refreshContinue());   // back from an app: what was just watched
+    setInterval(refreshContinue, 60000);
     document.addEventListener('keydown', onKey);
     window.addEventListener('focus', () => { if (busy && !$('launch').classList.contains('error')) hideOverlay(); });
     document.body.classList.add('ready');

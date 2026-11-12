@@ -194,3 +194,26 @@ body.lite .ss-photo.drift{animation:none}
 .ss-credit{position:absolute;right:calc(var(--u)*1.6);top:calc(var(--u)*1.2);font-size:calc(var(--u)*.85);color:rgba(255,255,255,.6);text-shadow:0 1px 6px rgba(0,0,0,.6)}
 /* The home screen's own animation pauses underneath (nothing of it shows). */
 body.saver-on .blob{animation-play-state:paused}
+
+/* ---------- Continue Watching row (js/home.js): picture, title, time left; OK opens the app right there ---------- */
+.row.small.cont{grid-template-columns:repeat(var(--cols,4),minmax(0,1fr));width:min(94%,calc(var(--cols,4) * 26%));margin-top:0}
+.cont .tile{height:calc(var(--u)*6.4);padding:0 calc(var(--u)*1.2) 0 calc(var(--u)*.7);gap:calc(var(--u)*1.1)}
+.cont .thumb{position:relative;flex:none;width:calc(var(--u)*9);height:calc(var(--u)*5.1);border-radius:calc(var(--u)*.8);
+  overflow:hidden;background:rgba(255,255,255,.06)}
+.cont .thumb img{width:100%;height:100%;object-fit:cover;display:block}
+.cont .thumb .icon{position:absolute;left:calc(var(--u)*.45);bottom:calc(var(--u)*.55);width:calc(var(--u)*1.7);height:calc(var(--u)*1.7);
+  border-radius:calc(var(--u)*.45);box-shadow:0 1px 6px rgba(0,0,0,.5)}
+.cont .thumb.none .icon{left:50%;top:50%;bottom:auto;transform:translate(-50%,-50%);width:calc(var(--u)*2.6);height:calc(var(--u)*2.6)}
+.cont .thumb .progress{position:absolute;left:0;right:0;bottom:0;height:calc(var(--u)*.3);background:rgba(255,255,255,.25)}
+.cont .thumb .progress::after{content:"";position:absolute;left:0;top:0;bottom:0;width:var(--p,0%);background:#e50914}
+.cont .text{min-width:0;text-align:left}
+.cont .name{font-size:calc(var(--u)*1.1);font-weight:600;line-height:1.2;color:var(--text);display:-webkit-box;-webkit-box-orient:vertical;-webkit-line-clamp:2;overflow:hidden}
+.cont .sub{font-size:calc(var(--u)*.95);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+/* With the extra row: a smaller clock and no button hints, so everything still fits the screen. */
+body.has-continue .clock{font-size:calc(var(--u)*6)}
+body.has-continue .greet{font-size:calc(var(--u)*1.9)}
+body.has-continue .big .tile{height:calc(var(--u)*12.4)}
+body.has-continue .label:not(.minor){margin-bottom:calc(var(--u)*1.8)}
+body.has-continue .hints{display:none}
+body.has-continue .rows .row.big + .label{margin-top:calc(var(--u)*2.2)}
+body.has-continue .rows .row.cont + .label{margin-top:calc(var(--u)*1.8)}

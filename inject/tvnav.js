@@ -718,6 +718,7 @@
      Video's and Netflix's banners) do not count, so they never take over the arrows. */
   const BIG = 0.25;
   const OK_KEY = 'tvnav-ok-at';
+  const ART_KEY = 'tvnav-card';
   const userVideos = new WeakSet();
   let autoFsDoneFor = null, fullscreenByOk = false;
   // OK counts as starting a video when it opened another page (a film's player) or was pressed on something to
@@ -737,6 +738,10 @@
   }
   function noteOk(el) {
     try { sessionStorage.setItem(OK_KEY, JSON.stringify({ t: Date.now(), href: location.href, play: playish(el) })); } catch (e) { /* storage blocked */ }
+    // The picture and name of a card OK was pressed on, for the home screen's Continue Watching row (Netflix's
+    // player has neither). Kept until another card is pressed.
+    const img = el && el.isConnected && [...el.querySelectorAll('img')].find(i => i.naturalWidth >= 120 && i.getBoundingClientRect().width >= 80);
+    if (img) try { sessionStorage.setItem(ART_KEY, JSON.stringify({ t: Date.now(), src: img.currentSrc || img.src, title: (el.getAttribute('aria-label') || img.alt || '').trim() })); } catch (e) { /* storage blocked */ }
   }
   function share(v) { const b = v.getBoundingClientRect(); return (b.width * b.height) / (innerWidth * innerHeight); }
   const yours = v => userVideos.has(v) || (document.fullscreenElement && document.fullscreenElement.contains(v));
@@ -947,12 +952,68 @@
     if (okRecently() || (document.fullscreenElement && document.fullscreenElement.contains(v))) userVideos.add(v);
     if (userVideos.has(v)) startedBig(v, okRecently(), 0);
   }
+  /* ---------- Continue Watching (the home screen's row) ----------
+     While a video you started plays, what it is and where you are go to window.tvnavWatched every 30 s (and when
+     it pauses or ends); tvnav-host.ps1 keeps the latest one per app. Near the end it is marked done (removed). */
+  const reporting = new WeakSet();
+  function followWatching(v) {
+    if (reporting.has(v) || typeof window.tvnavWatched !== 'function') return;
+    reporting.add(v);
+    const send = () => {
+      if (!v.isConnected) { clearInterval(timer); return; }
+      const live = !isFinite(v.duration);
+      const done = !live && v.duration > 60 && (v.ended || v.currentTime / v.duration > 0.95);
+      if (!done && !live && v.currentTime < 20) return;                // only once really watching
+      try { window.tvnavWatched(JSON.stringify(Object.assign({ done }, describeWatch(v, live)))); } catch (e) { /* ignore */ }
+    };
+    const timer = setInterval(() => { if (!v.paused) send(); }, 30000);
+    v.addEventListener('pause', send);
+    v.addEventListener('ended', send);
+    setTimeout(send, 25000);
+  }
+  const APP_NAMES = /\s*[-|–—]\s*(YouTube|Netflix|Prime Video|Amazon\.?\w*|Disney\+?|DStv\s*\w*|Twitch|F1 ?TV)\s*$/i;
+  function describeWatch(v, live) {
+    let title = '', sub = '', art = '';
+    const ms = navigator.mediaSession && navigator.mediaSession.metadata;
+    if (ms && ms.title) {
+      title = ms.title; sub = ms.artist || '';
+      const a = (ms.artwork || []).slice().sort((x, y) => parseInt(y.sizes) - parseInt(x.sizes))[0];
+      if (a) art = a.src;
+    }
+    const nf = document.querySelector('[data-uia="video-title"]');          // Netflix's player: show, episode
+    if (nf && nf.textContent.trim()) {
+      const h = nf.querySelector('h4');
+      title = (h ? h.textContent : nf.textContent).trim();
+      sub = h ? nf.textContent.slice(h.textContent.length).trim() : '';
+    }
+    if (!title) {
+      const t = document.title.replace(/^\(\d+\)\s*/, '').replace(APP_NAMES, '').trim();   // "(3) " = YouTube's unread count
+      if (t && !/^(YouTube|Netflix|Prime Video|Disney\+|DStv|Twitch|F1 ?TV|Watch)$/i.test(t)) title = t;
+    }
+    let card = null;
+    try { card = JSON.parse(sessionStorage.getItem(ART_KEY) || 'null'); } catch (e) { /* storage blocked */ }
+    if (card && Date.now() - card.t > 3 * 3600e3) card = null;
+    const u = new URL(location.href);
+    if (/(^|\.)youtube\.com$/.test(u.hostname)) {
+      const id = u.searchParams.get('v');
+      if (id && !art) art = 'https://i.ytimg.com/vi/' + id + '/hqdefault.jpg';
+      if (!live) u.searchParams.set('t', Math.floor(v.currentTime) + 's');   // carry on from here
+    }
+    if (NETFLIX) u.search = '';                         // tracking extras (Netflix remembers the position itself)
+    if (!art && card) art = card.src;
+    if (!title && card) title = card.title;
+    if (!art) { const og = document.querySelector('meta[property="og:image"]'); if (og) art = og.content; }
+    return { title: (title || '').slice(0, 90), sub: sub.slice(0, 90), art, url: u.href, live,
+      position: Math.floor(v.currentTime || 0), duration: live ? 0 : Math.floor(v.duration || 0), at: Date.now() };
+  }
+
   // (The player may still be growing to its full size when the video starts, as Netflix's does: look again.)
   function startedBig(v, byOk, tries) {
     if (v.paused) return;
     if (share(v) <= BIG) { if (tries < 12) setTimeout(() => startedBig(v, byOk, tries + 1), 500); return; }
     {
       usingKeys = false; drawRing();
+      followWatching(v);
       // Opened with OK: straight to full screen, as a TV app plays a video (once per page, so leaving full
       // screen yourself sticks).
       if (byOk && !document.fullscreenElement && autoFsDoneFor !== location.href) {

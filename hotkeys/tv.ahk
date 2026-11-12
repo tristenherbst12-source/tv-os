@@ -275,7 +275,11 @@ CheckPointer() {
 }
 
 ; ---------- volume keys (TV only) ----------
-global VolGui := 0, VolBar := 0, VolText := 0
+; The volume pop-up: a dark pill near the top of the screen (clear of subtitles), with a speaker icon that shows the
+; level, a slim bar and the number. Fades in and out; never takes focus, clicks pass through it.
+global VolGui := 0, VolIcon := 0, VolTrack := 0, VolFill := 0, VolNum := 0, VolAlpha := 0
+global VolW := 470, VolH := 84, VolBarX := 96, VolBarW := 276
+global VolFadeIn := FadeVolume.Bind(+1), VolFadeOut := FadeVolume.Bind(-1)
 VolumeKey(step, *) {
     if (step = 0)
         SoundSetMute(-1)
@@ -287,27 +291,53 @@ VolumeKey(step, *) {
     ShowVolume()
 }
 ShowVolume() {
-    global VolGui, VolBar, VolText
+    global VolGui, VolIcon, VolTrack, VolFill, VolNum
     if !VolGui {
-        VolGui := Gui("+AlwaysOnTop -Caption +ToolWindow +E0x20 +E0x08000000")   ; click-through, never takes focus
-        VolGui.BackColor := "0F1A2E"
-        VolGui.MarginX := 28, VolGui.MarginY := 18
-        VolGui.SetFont("s16 cF6F7F0 w600", "Segoe UI")
-        VolText := VolGui.Add("Text", "w420 Center", "")
-        VolBar := VolGui.Add("Progress", "w420 h10 y+12 c5B8CFF Background2A3550 Range0-100", 0)
-        VolGui.Show("Hide AutoSize")
-        WinGetPos(, , &w, &h, VolGui.Hwnd)
-        DllCall("SetWindowRgn", "Ptr", VolGui.Hwnd, "Ptr", DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", w + 1, "Int", h + 1, "Int", 28, "Int", 28, "Ptr"), "Int", true)
-        WinSetTransparent(235, VolGui.Hwnd)
+        VolGui := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x20 +E0x08000000")   ; click-through, no focus
+        VolGui.BackColor := "121826"
+        VolGui.MarginX := 0, VolGui.MarginY := 0
+        VolGui.SetFont("s25 cFFFFFF", "Segoe MDL2 Assets")                ; Windows' own icon font (speaker)
+        VolIcon := VolGui.Add("Text", "x32 y" (VolH - 40) // 2 " w50 h40 BackgroundTrans", "")
+        ; The bar: a dim track with a white fill on top (plain colour blocks, so it stays crisp on any GPU).
+        VolTrack := VolGui.Add("Text", "x" VolBarX " y" (VolH - 6) // 2 " w" VolBarW " h6 Background3A4560")
+        VolFill := VolGui.Add("Text", "x" VolBarX " y" (VolH - 6) // 2 " w1 h6 BackgroundFFFFFF")
+        VolGui.SetFont("s17 w600 cFFFFFF", "Segoe UI")
+        VolNum := VolGui.Add("Text", "x" (VolBarX + VolBarW + 12) " y" (VolH - 34) // 2 " w58 h34 Right BackgroundTrans", "")
+        VolGui.Show("Hide w" VolW " h" VolH)
+        DllCall("SetWindowRgn", "Ptr", VolGui.Hwnd, "Ptr", DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", VolW + 1, "Int", VolH + 1, "Int", VolH, "Int", VolH, "Ptr"), "Int", true)
+        WinSetTransparent(0, VolGui.Hwnd)
     }
     muted := SoundGetMute(), level := Round(SoundGetVolume())
-    VolText.Value := muted ? "Muted" : "Volume " level
-    VolBar.Value := muted ? 0 : level
-    WinGetPos(, , &w, &h, VolGui.Hwnd)
-    VolGui.Show("NA x" (A_ScreenWidth - w) // 2 " y" Round(A_ScreenHeight * 0.82))
-    SetTimer(HideVolume, -1600)
+    ; Speaker with 0-3 waves by level (Segoe MDL2: E992-E995), crossed out when muted (E74F).
+    VolIcon.Value := Chr(muted ? 0xE74F : level = 0 ? 0xE992 : level < 34 ? 0xE993 : level < 67 ? 0xE994 : 0xE995)
+    fill := muted ? 0 : Round(VolBarW * level / 100)
+    VolFill.Visible := fill > 0
+    if fill
+        VolFill.Move(, , fill)
+    VolNum.Value := muted ? "" : level
+    VolTrack.Opt("+Redraw"), VolFill.Opt("+Redraw")
+    VolGui.Show("NA x" (A_ScreenWidth - VolW) // 2 " y" Round(A_ScreenHeight * 0.06))
+    SetTimer(VolFadeOut, 0)
+    SetTimer(VolFadeIn, 15)
+    SetTimer(HideVolume, -1700)
 }
-HideVolume() => VolGui && VolGui.Hide()
+; Fades the pop-up in (dir +1, to 235) or out (dir -1, then hides it), a few steps every 15 ms.
+FadeVolume(dir) {
+    global VolAlpha
+    VolAlpha := Max(0, Min(235, VolAlpha + dir * 47))
+    try WinSetTransparent(VolAlpha, VolGui.Hwnd)
+    if (dir > 0 && VolAlpha >= 235) || (dir < 0 && VolAlpha <= 0) {
+        SetTimer(, 0)
+        if (dir < 0)
+            VolGui.Hide()
+    }
+}
+HideVolume() {
+    if VolGui {
+        SetTimer(VolFadeIn, 0)
+        SetTimer(VolFadeOut, 15)
+    }
+}
 
 ; ---------- key feed for the key-test page ----------
 OnKeyDown(ih, vk, sc) {

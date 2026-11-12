@@ -153,7 +153,7 @@ function Save-AsPng([string]$from, [string]$to, [switch]$Trim) {
 
 $results = foreach ($id in $apps.PSObject.Properties.Name) {
     $a = $apps.$id
-    if (-not $a.icon -or $a.hidden) { continue }
+    if (-not $a.icon -or $a.hidden -or $a.iconKeep) { continue }     # iconKeep: a file kept with the launcher (DStv)
     $type = $a.launch.type
     $found = switch ($type) {
         'store'    { Find-StoreIcon $a.launch.package }

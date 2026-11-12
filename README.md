@@ -108,7 +108,7 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 | Back | Back to the home screen | Back a page; **hold** it to go home |
 | Home | Screensaver (photos, time, music); any button ends it | Back to the home screen |
 | Watching a video | | Opens full screen. Left/Right skip 10 s (not on live streams), OK pauses/plays, Up/Down show the player's controls (gear, quality, subtitles) with the highlight on them, Back hides them, Back again leaves the video |
-| Volume | A small volume bar shows the level | Same |
+| Volume | A volume pop-up at the top of the screen shows the level | Same |
 | Play/Pause | Works in the apps | |
 | L (keyboard) | Lite Mode on/off (less animation, if the PC struggles) | |
 
@@ -120,6 +120,9 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 - **Spotify** keeps playing when you press Home (the other apps close), and the home screen shows the song that is
   playing. In Spotify, each song in a list is one stop: OK plays it.
 - **Netflix** handles its own player: Left/Right skip 10 s, OK pauses.
+- **Continue Watching:** a row on the home screen with the last video watched in each app (picture, title, time
+  left). OK opens the app right there and carries on (YouTube at the same second; Netflix remembers its own place).
+  Finished videos drop off; entries older than 3 weeks too.
 - **Screensaver:** after 5 minutes untouched on the home screen (never while an app is open), or when you press
   Home on the home screen: nature photos (Wikimedia Commons, credited on screen) with the time, date and the song
   Spotify is playing. Any button ends it. Settings > Screensaver changes the time or turns it off.

@@ -108,7 +108,7 @@ window.TV = window.TV || {};
   TV.helper = {
     available: !!base,
     request,
-    launch: id => request('/launch/' + encodeURIComponent(id), { method: 'POST', timeout: 8000 }),
+    launch: (id, url) => request('/launch/' + encodeURIComponent(id), { method: 'POST', timeout: 8000, body: url ? { url } : undefined }),
     status: () => request('/status')
   };
 })();

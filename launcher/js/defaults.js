@@ -35,7 +35,7 @@ window.TV_DEFAULTS = {
     },
     "dstv": {
       "name": "DStv", "sub": "Live TV and Catch Up", "accent": "#1f6fd6", "glyph": "tv",
-      "icon": null, "iconBg": null, "_iconNote": "dstv.stream only has a small plain-cyan favicon, so the tile uses its glyph. Put a PNG at icons/dstv.png and set icon to use one.",
+      "icon": "icons/dstv.svg", "iconBg": "#000000", "iconKeep": true, "_iconNote": "dstv.stream's favicon is a plain cyan shape, so the tile uses the DStv mark cropped from the site's own logo file. iconKeep: setup leaves it alone.",
       "launch": { "type": "edge-app", "url": "https://dstv.stream/", "profile": "dstv", "scale": 1.25 },
       "onHome": "close"
     },
