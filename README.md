@@ -167,9 +167,9 @@ settings stay as they are.
 - **Everything is slow or stutters:** press L or turn on Settings > Lite Mode.
 - **Logs:** `C:\Users\TV\AppData\Local\TVLauncher\logs` (`helper.log`, `start.log`, and `tvnav-host.log` for the
   remote navigation inside the apps: it notes where an arrow found nowhere to go).
-- **The remote does not wake the PC from Sleep:** in an administrator PowerShell, `cd C:TVLauncher` then
-  `powershell -NoProfile -ExecutionPolicy Bypass -File scriptswake-check.ps1 -Apply`, restart, and try again. It
-  writes `C:TVLauncherwake-report.txt` and lists the next steps (a USB keyboard test, the BIOS).
+- **The remote does not wake the PC from Sleep:** in an administrator PowerShell, `cd C:\TVLauncher` then
+  `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\wake-check.ps1 -Apply`, restart, and try again. It
+  writes `C:\TVLauncher\wake-report.txt` and lists the next steps (a USB keyboard test, the BIOS).
 - **Wi-Fi or Bluetooth settings do not open:** `helper.log` says why. To join a Wi-Fi network once, you can also use
   Settings > Windows Desktop and the network icon there, then restart.
 - **Trying it on another PC without changing it:** `scripts\start.cmd -Windowed` runs it in a window in test mode
