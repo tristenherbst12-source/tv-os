@@ -431,3 +431,16 @@ once at 04:00-04:10 and the helper re-enters standby 45 s after the restart (`st
 Idle power of a Haswell i5 Tiny is roughly 8-12 W; staying on is fine for the SSD and electronics (low heat, no
 power cycling); clean the vents every few months. Tested here in test mode (requests, Power page); the real
 screen-off/mute/wake path and the 04:00 restart still need the TV PC.
+
+## Stage 6, round 7 (12 Nov 2026): standby woke by itself
+On the TV PC, standby ended after 2.5-3 minutes with nothing pressed (the remote goes to sleep after 15 s).
+`GetLastInputInfo` counts every input report, including the empty ones a remote's receiver sends now and then
+while the remote sleeps, and input made by programs. Now the hotkeys decide: tv.ahk polls `GET /standby/watch`
+(every 1 s, every 0.1 s while in standby) and, in standby, calls `POST /standby/wake {reason}` only for a
+physical key press (`A_TimeIdleKeyboard`, which ignores injected input), a click, or pointer movement of more than
+40 px (the pointer waits in the middle of the screen during standby, so any direction shows). The remote's power
+key in standby wakes it instead of re-entering. The helper still watches `GetLastInputInfo`: while the hotkeys are
+watching (asked within 5 s), other input is logged as ignored and the screen is switched off again in case
+Windows turned it on; without the hotkeys it falls back to ending standby on any input. Tested here with a
+stand-in helper: idle, an injected key and an injected 150 px pointer move left it in standby. A real press on
+the TV PC still to check (helper.log names what ended standby).

@@ -91,6 +91,8 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 - [ ] Screen Off When Idle: the TV goes to standby, and a remote button wakes it.
 - [ ] Power > Standby: the screen goes off and the sound mutes; any remote button brings the home screen back at
       once, with the sound as it was. Spotify pauses on standby.
+- [ ] Standby left alone for 10 minutes (remote untouched): it stays off. helper.log shows what ended it
+      ("standby off (button ...)").
 - [ ] The remote's power button: standby (or at least the screen goes off). Note what Remote Button Test shows for it.
 - [ ] Left in standby overnight: it restarted around 04:00 and is in standby again in the morning.
 - [ ] Sleep timer (set 30 min) goes to standby / shuts down.

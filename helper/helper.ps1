@@ -391,10 +391,15 @@ function Set-SleepTimer {
 # on its usual plan (not Balanced: that one would put it to real Sleep after 30 minutes). The first button
 # press (or touchpad movement) brings everything back at once. While in standby the PC restarts once at 04:00,
 # so it starts each day fresh, and goes back to standby after the restart.
+# What counts as a button press is decided by the hotkeys (hotkeys/tv.ahk): only real key presses, clicks and
+# pointer movement of more than a few pixels. Windows' own "last input" also counts empty reports, which the
+# remote's receiver sends now and then while the remote sleeps (the screen came back after 2-3 minutes with
+# nothing pressed). Only when the hotkeys are not running does the helper fall back to Windows' last input.
 $Standby = $null                                     # @{ since; tick; wasMuted } while in standby
 $StandbyResumeFile = Join-Path $TV.Data 'standby-after-restart'
 $NightlyRestartDone = (Get-Date).Date                # never on the day the helper starts
 $StandbyAfterStart = $null
+$HotkeysWatching = [datetime]::MinValue            # last time the hotkeys asked whether we are in standby
 if (Test-Path $StandbyResumeFile) {                  # restarted from standby: back to standby once the launcher is up
     Remove-Item $StandbyResumeFile -ErrorAction SilentlyContinue
     $StandbyAfterStart = (Get-Date).AddSeconds(45)
@@ -415,7 +420,7 @@ function Enter-Standby([string]$Reason) {
     try { $muted = [TVHelper.Audio]::GetMute(); [TVHelper.Audio]::SetMute($true) } catch { }
     Start-Sleep -Milliseconds 400
     [TVHelper.Native]::MonitorOff()
-    $script:Standby = @{ since = Get-Date; tick = [TVHelper.Native]::LastInputTick(); wasMuted = $muted }
+    $script:Standby = @{ since = Get-Date; tick = [TVHelper.Native]::LastInputTick(); wasMuted = $muted; ignored = 0 }
     return @{ ok = $true; action = 'standby' }
 }
 
@@ -436,7 +441,14 @@ function Test-Standby {
     if (-not $Standby) { return }
     $tick = [TVHelper.Native]::LastInputTick()
     if (((Get-Date) - $Standby.since).TotalSeconds -lt 2) { $Standby.tick = $tick; return }   # the press that started it
-    if ($tick -ne $Standby.tick) { Exit-Standby 'button pressed'; return }
+    if ($tick -ne $Standby.tick) {
+        $Standby.tick = $tick
+        if (((Get-Date) - $HotkeysWatching).TotalSeconds -gt 5) { Exit-Standby 'input (hotkeys not running)'; return }
+        # Input that was no button press: if it switched the screen back on, switch it off again.
+        $Standby.ignored++
+        if ($Standby.ignored -le 20) { Log "standby: input that was no button press (ignored)" }
+        [TVHelper.Native]::MonitorOff()
+    }
     $now = Get-Date
     if ($now.Hour -eq 4 -and $now.Minute -lt 10 -and $now.Date -ne $NightlyRestartDone -and ($now - $Standby.since).TotalMinutes -ge 30) {
         $script:NightlyRestartDone = $now.Date
@@ -632,6 +644,13 @@ function Handle-Request {
         '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
 
         '^POST /screen-off$' { Send-Response $ctx 200 (Invoke-Power 'screen-off' 'idle on home screen'); return }
+        # The hotkeys ask every second (/standby/watch) and say when a real button was pressed (/standby/wake).
+        '^GET /standby/watch$' { $script:HotkeysWatching = Get-Date; Send-Response $ctx 200 @{ standby = [bool]$Standby }; return }
+        '^POST /standby/wake$' {
+            $b = Read-Body $ctx
+            $why = if ($b -and $b.reason) { [string]$b.reason } else { 'button pressed' }
+            Exit-Standby $why.Substring(0, [Math]::Min(60, $why.Length)); Send-Response $ctx 200 @{ ok = $true }; return
+        }
         '^GET /standby$' { Send-Response $ctx 200 @{ standby = [bool]$Standby; since = $(if ($Standby) { $Standby.since.ToString('o') } else { $null }) }; return }
         '^POST /power/(sleep|standby|restart|shutdown)$' {
             $action = $Matches[1]
