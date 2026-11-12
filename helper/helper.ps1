@@ -23,7 +23,8 @@
 #   GET  /sleep-timer, POST /sleep-timer     POST {minutes (0 = off), action: sleep|shutdown}
 #   GET  /now-playing               what Spotify is playing (written by tvnav-host.ps1), or nowPlaying = null
 #   POST /screen-off               turn the display off now
-#   POST /power/{sleep|restart|shutdown}
+#   POST /power/{standby|restart|shutdown}   (sleep = standby: screen off, muted, low power; a button ends it)
+#   GET  /standby                   {standby, since}
 #   POST /open-settings/{wifi|bluetooth|sound}   open that Windows Settings page
 #   POST /restart-launcher
 #   GET  /desktop, POST /desktop    escape hatch: start explorer.exe (PIN-checked when one is set)
@@ -347,7 +348,9 @@ function Set-DesktopPin {
 # ---------- power ----------
 # In test mode nothing is switched off: the action is logged and reported back to the page.
 function Invoke-Power {
-    param([ValidateSet('sleep', 'restart', 'shutdown', 'screen-off')][string]$Action, [string]$Reason = 'request')
+    param([ValidateSet('sleep', 'standby', 'restart', 'shutdown', 'screen-off')][string]$Action, [string]$Reason = 'request')
+    # Sleep is a standby on the TV PC (the remote cannot wake it from real Sleep), and so is the idle screen-off.
+    if ($Action -in 'sleep', 'standby', 'screen-off') { return Enter-Standby $Reason }
     if ($TestMode) { Log "TEST MODE: would $Action now ($Reason)"; return @{ ok = $true; testMode = $true; action = $Action } }
     Log "power: $Action ($Reason)"
     switch ($Action) {
@@ -380,6 +383,67 @@ function Set-SleepTimer {
         Log "sleep timer: $Action in $Minutes min"
     }
     return Get-SleepTimerState
+}
+
+# ---------- standby ----------
+# The TV PC cannot be woken from Sleep by the remote (tested: no USB device wakes it), so "Sleep" is a standby
+# instead, as a TV does: the screen goes off, the sound is muted, Spotify pauses and the PC idles
+# on its usual plan (not Balanced: that one would put it to real Sleep after 30 minutes). The first button
+# press (or touchpad movement) brings everything back at once. While in standby the PC restarts once at 04:00,
+# so it starts each day fresh, and goes back to standby after the restart.
+$Standby = $null                                     # @{ since; tick; wasMuted } while in standby
+$StandbyResumeFile = Join-Path $TV.Data 'standby-after-restart'
+$NightlyRestartDone = (Get-Date).Date                # never on the day the helper starts
+$StandbyAfterStart = $null
+if (Test-Path $StandbyResumeFile) {                  # restarted from standby: back to standby once the launcher is up
+    Remove-Item $StandbyResumeFile -ErrorAction SilentlyContinue
+    $StandbyAfterStart = (Get-Date).AddSeconds(45)
+}
+
+function Enter-Standby([string]$Reason) {
+    if ($TestMode) { Log "TEST MODE: would go to standby ($Reason)"; return @{ ok = $true; testMode = $true; action = 'standby' } }
+    if ($script:Standby) { [TVHelper.Native]::MonitorOff(); return @{ ok = $true; action = 'standby' } }
+    Log "standby on ($Reason)"
+    # Spotify playing: pause it (the window keeps running).
+    $np = Join-Path $TV.Data 'now-playing.json'
+    try {
+        if ((Test-Path $np) -and ((Get-Date) - (Get-Item $np).LastWriteTime).TotalSeconds -lt 30 -and ([IO.File]::ReadAllText($np) | ConvertFrom-Json).playing) {
+            [TVHelper.Native]::MediaPlayPause()
+        }
+    } catch { }
+    $muted = $false
+    try { $muted = [TVHelper.Audio]::GetMute(); [TVHelper.Audio]::SetMute($true) } catch { }
+    Start-Sleep -Milliseconds 400
+    [TVHelper.Native]::MonitorOff()
+    $script:Standby = @{ since = Get-Date; tick = [TVHelper.Native]::LastInputTick(); wasMuted = $muted }
+    return @{ ok = $true; action = 'standby' }
+}
+
+function Exit-Standby([string]$Reason) {
+    if (-not $script:Standby) { return }
+    $s = $script:Standby
+    $script:Standby = $null
+    try { [TVHelper.Audio]::SetMute([bool]$s.wasMuted) } catch { }
+    Log "standby off ($Reason, after $([int]((Get-Date) - $s.since).TotalMinutes) min)"
+}
+
+# Every second: a button press ends standby; 04:00 restarts once a day.
+function Test-Standby {
+    if ($StandbyAfterStart -and (Get-Date) -ge $StandbyAfterStart) {
+        $script:StandbyAfterStart = $null
+        if (-not $Standby) { [void](Enter-Standby 'after the nightly restart') }
+    }
+    if (-not $Standby) { return }
+    $tick = [TVHelper.Native]::LastInputTick()
+    if (((Get-Date) - $Standby.since).TotalSeconds -lt 2) { $Standby.tick = $tick; return }   # the press that started it
+    if ($tick -ne $Standby.tick) { Exit-Standby 'button pressed'; return }
+    $now = Get-Date
+    if ($now.Hour -eq 4 -and $now.Minute -lt 10 -and $now.Date -ne $NightlyRestartDone -and ($now - $Standby.since).TotalMinutes -ge 30) {
+        $script:NightlyRestartDone = $now.Date
+        Log 'nightly restart (in standby since a while)'
+        try { Set-Content -Path $StandbyResumeFile -Value (Get-Date -Format o) } catch { }
+        [void](Invoke-Power 'restart' 'nightly restart in standby')
+    }
 }
 
 function Test-SleepTimer {
@@ -568,7 +632,8 @@ function Handle-Request {
         '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
 
         '^POST /screen-off$' { Send-Response $ctx 200 (Invoke-Power 'screen-off' 'idle on home screen'); return }
-        '^POST /power/(sleep|restart|shutdown)$' {
+        '^GET /standby$' { Send-Response $ctx 200 @{ standby = [bool]$Standby; since = $(if ($Standby) { $Standby.since.ToString('o') } else { $null }) }; return }
+        '^POST /power/(sleep|standby|restart|shutdown)$' {
             $action = $Matches[1]
             if ($TestMode) { Send-Response $ctx 200 (Invoke-Power $action 'power page'); return }
             Send-Response $ctx 200 @{ ok = $true; action = $action }   # answer first: the page may not get a reply afterwards
@@ -654,6 +719,7 @@ try {
             }
         }
         try { Test-SleepTimer } catch { Log "sleep timer error: $($_.Exception.Message)" }
+        try { Test-Standby } catch { Log "standby error: $($_.Exception.Message)" }
         # Keep the launcher window alive (checked every 5 s).
         if ($ManageLauncher -and $Supervise -and ((Get-Date) - $lastCheck).TotalSeconds -ge 5) {
             $lastCheck = Get-Date

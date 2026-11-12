@@ -470,6 +470,10 @@ for k in JsonArray(km, "global", "home")
     try Hotkey("$" k, HomeKey)
 for k in JsonArray(km, "global", "block")
     try Hotkey("$" k, (*) => 0)
+; The remote's power / sleep button: standby (screen off, muted; any button brings it back). Real Sleep is not
+; used: the remote cannot wake this PC from it.
+for k in JsonArray(km, "global", "standby")
+    try Hotkey("$" k, (*) => HelperCall("POST", "/power/standby", "", true))
 HotIf(BackApplies)
 for k in JsonArray(km, "global", "back")
     try Hotkey("$" k, BackDown)

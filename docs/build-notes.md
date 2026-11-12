@@ -416,3 +416,18 @@ it sits on, the Power Management switches, the armed list, the last wake and rec
 `MSPower_DeviceWakeEnable`) and turns "may be turned off to save power" off for USB hubs and controllers
 (`MSPower_DeviceEnable`). If it still fails: a USB keyboard in the same port tells receiver limit (keyboard wakes)
 from BIOS/USB power (nothing wakes: BIOS Power > Enhanced Power Saving Mode, USB wake options; another port).
+
+## Stage 6, round 6 (12 Nov 2026): standby instead of Sleep
+The mini PC cannot be woken from Sleep by any USB device (remote or wired keyboard; Enhanced Power Saving Mode
+off, BIOS keyboard power-on on, wake switches set by wake-check.ps1). So "Sleep" is now a TV-style **standby**
+(helper `Enter-Standby`): Spotify paused (media key, when now-playing says it plays), sound muted (the old state
+kept), screen off (SC_MONITORPOWER). The helper's 1 s loop compares `GetLastInputInfo` with the moment standby
+began (the first 2 s absorb the press that started it); any later key or pointer input ends it and restores the
+sound. The Power page shows black until `/standby` reports the end, then goes home. Power page Sleep, the sleep
+timer's sleep and Screen Off When Idle all use it; the remote's Sleep key (keymap `global.standby`) too, and setup
+sets the power and sleep buttons to "turn off the display" so nothing can put the PC into a Sleep it cannot leave.
+The plan stays High performance (Balanced would sleep after 30 min). While in standby for 30+ min, the PC restarts
+once at 04:00-04:10 and the helper re-enters standby 45 s after the restart (`standby-after-restart` marker).
+Idle power of a Haswell i5 Tiny is roughly 8-12 W; staying on is fine for the SSD and electronics (low heat, no
+power cycling); clean the vents every few months. Tested here in test mode (requests, Power page); the real
+screen-off/mute/wake path and the 04:00 restart still need the TV PC.

@@ -45,13 +45,15 @@
 (async function () {
   const { el } = TV.ui;
   const ICONS = {
-    sleep: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
+    standby: '<path d="M12 3a6 6 0 0 0 9 9 9 9 0 1 1-9-9z"/>',
     restart: '<path d="M3 12a9 9 0 1 0 3-6.7"/><path d="M3 3v6h6"/>',
     shutdown: '<path d="M12 3v9"/><path d="M6.3 6.3a8 8 0 1 0 11.4 0"/>'
   };
   const ACTIONS = [
-    { id: 'sleep',    name: 'Sleep',     sub: 'Any Button on the Remote Wakes It', accent: '#5b8cff',
-      ask: 'Put the TV PC to Sleep?', text: 'Press any button on the remote to wake it up.', go: 'Sleep' },
+    // Standby, not Sleep: this PC cannot be woken from Sleep by the remote. The screen goes off, the sound is muted
+    // and the PC idles on low power; any button brings it straight back (helper.ps1, Enter-Standby).
+    { id: 'standby',  name: 'Standby',   sub: 'Screen Off, Back With Any Button',  accent: '#5b8cff',
+      ask: 'Go to Standby?', text: 'The screen turns off and the sound is muted. Press any button on the remote to come back.', go: 'Standby' },
     { id: 'restart',  name: 'Restart',   sub: 'Start Fresh If Something Is Stuck', accent: '#f5a524',
       ask: 'Restart the TV PC?', text: 'It comes back to this home screen in about a minute.', go: 'Restart' },
     { id: 'shutdown', name: 'Shut Down', sub: 'Turns the PC Off Completely',       accent: '#ff4f6d',
@@ -81,15 +83,28 @@
     if (!TV.helper.available) { TV.ui.toast('Needs the Helper, Which Is Not Running'); return; }
     busy = true;
     const ok = await TV.ui.confirm({ title: a.ask, text: a.text,
-      buttons: [{ label: 'Cancel', value: false }, { label: a.go, value: true, danger: a.id !== 'sleep' }] });
+      buttons: [{ label: 'Cancel', value: false }, { label: a.go, value: true, danger: a.id !== 'standby' }] });
     if (ok) {
       try {
         const r = await TV.helper.request('/power/' + a.id, { method: 'POST' });
         if (r.testMode) TV.ui.toast('Test Mode: The PC Would ' + a.go + ' Now');
-        else document.getElementById('sub').textContent = a.id === 'sleep' ? 'Going to Sleep…' : a.id === 'restart' ? 'Restarting…' : 'Shutting Down…';
+        else if (a.id === 'standby') { waitForWake(); return; }
+        else document.getElementById('sub').textContent = a.id === 'restart' ? 'Restarting…' : 'Shutting Down…';
       } catch (e) { TV.ui.toast('Could Not ' + a.go); }
     }
     busy = false;
+  }
+
+  // In standby: a black screen until the helper says a button was pressed, then back to the home screen.
+  function waitForWake() {
+    document.body.classList.add('standby');
+    // The button that wakes it does nothing else here.
+    window.addEventListener('keydown', e => { if (document.body.classList.contains('standby')) { e.preventDefault(); e.stopImmediatePropagation(); } }, true);
+    const check = () => TV.helper.request('/standby').then(st => {
+      if (st && st.standby) { setTimeout(check, 700); return; }
+      location.href = '../index.html';
+    }).catch(() => setTimeout(check, 1500));
+    setTimeout(check, 1200);
   }
 
   await TV.ui.startPage(action => {

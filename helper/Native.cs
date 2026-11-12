@@ -97,6 +97,18 @@ namespace TVHelper {
       PostMessage(new IntPtr(0xFFFF), 0x0112 /*WM_SYSCOMMAND*/, new IntPtr(0xF170) /*SC_MONITORPOWER*/, new IntPtr(2));
     }
 
+    // When the last key press or pointer movement happened (milliseconds since start-up, as Environment.TickCount).
+    [StructLayout(LayoutKind.Sequential)] struct LASTINPUTINFO { public uint cbSize; public uint dwTime; }
+    [DllImport("user32.dll")] static extern bool GetLastInputInfo(ref LASTINPUTINFO li);
+    public static uint LastInputTick() {
+      var li = new LASTINPUTINFO(); li.cbSize = (uint)Marshal.SizeOf(li);
+      return GetLastInputInfo(ref li) ? li.dwTime : 0;
+    }
+    // The media play/pause key, as if pressed on a keyboard (pauses Spotify for standby).
+    public static void MediaPlayPause() {
+      keybd_event(0xB3, 0, 1, UIntPtr.Zero); keybd_event(0xB3, 0, 3, UIntPtr.Zero);
+    }
+
     // Sleep (not hibernate). If hibernation is on, Windows may still choose hybrid sleep.
     public static bool Sleep() { return SetSuspendState(false, false, false); }
 

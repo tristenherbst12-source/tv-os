@@ -157,3 +157,6 @@ body.lite .live::before{animation:none}
 .speed-label{font-size:calc(var(--u)*1.2);font-weight:600;margin-top:calc(var(--u)*.3)}
 .speed-unit{font-size:calc(var(--u)*1);color:var(--dim)}
 .dialog-body + .dialog-buttons:empty{display:none}
+
+/* Power page: standby (a black screen until a button is pressed; the helper turns the screen off) */
+body.standby::after{content:"";position:fixed;inset:0;z-index:100;background:#000;cursor:none}

@@ -86,13 +86,13 @@ window.TV_DEFAULTS = {
     "iconPackage: Store app whose logo is used for a website tile when that app is installed (else the site icon).",
     "iconBg: plate colour behind the icon (Store manifest BackgroundColor). null = use accent; 'transparent' = no plate.",
     "store.package: package Name used to find the app with Get-AppxPackage (only winsettings uses this now).",
-    "Netflix, Prime Video, Disney+ and Spotify open as their websites in TV windows (decided 11 Nov 2026): their Store apps are Edge web apps anyway, and only our own windows can be full screen and get remote navigation (extensions/tvnav).",
+    "Netflix, Prime Video, Disney+ and Spotify open as their websites in TV windows (decided 11 Nov 2026): their Store apps are Edge web apps anyway, and only our own windows can be full screen and get remote navigation (inject/tvnav.js).",
     "hidden: not a tile (only listed so Home knows what to do with it). winsettings = the Windows Settings pages opened from Settings > Wi-Fi / Bluetooth.",
     "onHome: what the Home button does to this app. close = end it, minimize = keep running (Spotify keeps playing). Browser closes because opening it again would add a second window.",
-    "edge / edge-app: each gets its own Edge profile (profile name) under %LOCALAPPDATA%/TVLauncher/profiles, so logins stick. edge-app opens full screen without browser bars. Every TV window loads extensions/tvnav (arrows, OK and Back drive the site). Opening a tile whose window is still open (Spotify) brings that window back.",
+    "edge / edge-app: each gets its own Edge profile (profile name) under %LOCALAPPDATA%/TVLauncher/profiles, so logins stick. edge-app opens full screen without browser bars. Every TV window gets inject/tvnav.js (arrows, OK and Back drive the site), added by helper/tvnav-host.ps1 over a local debugging port. Opening a tile whose window is still open (Spotify) brings that window back.",
     "scale: makes everything in that one window bigger for viewing from the couch (1.5 = 150%). It only affects the window the tile opens: it runs as its own Edge process with its own profile.",
     "userAgent (optional): pretend to be another browser in that window. Not used: youtube.com/tv cannot be reached from a desktop browser (see docs/build-notes.md).",
-    "forceH264 loads extensions/h264only (Haswell cannot decode VP9 in hardware)."
+    "forceH264 adds inject/h264only.js (Haswell cannot decode VP9 in hardware)."
   ]
 },
   "keymap": {
@@ -111,7 +111,11 @@ window.TV_DEFAULTS = {
     "home":        ["Browser_Home"],
     "back":        ["Backspace", "Browser_Back"],
     "block":       ["Browser_Search"],
-    "escapeHatch": ["^!+d"]
+    "escapeHatch": ["^!+d"],
+    "volumeUp":    ["Volume_Up"],
+    "volumeDown":  ["Volume_Down"],
+    "mute":        ["Volume_Mute"],
+    "standby":     ["Sleep"]
   },
   "_notes": [
     "launcher: browser KeyboardEvent values. Each entry matches either e.key or e.code (e.g. 'Enter' or 'NumpadEnter').",
@@ -119,7 +123,9 @@ window.TV_DEFAULTS = {
     "home: always caught by tv.ahk. In an app it goes home; on the launcher it is turned into F24, because Edge itself would open its own home page on Browser_Home.",
     "back: a tap goes to the app (the TV windows turn it into 'back'); holding it 0.8 s goes home.",
     "block: swallowed, so Windows does not act on them (the remote's search button opens a Bing search otherwise).",
-    "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; volume and media keys are left to Windows.",
+    "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; media keys are left to the apps.",
+    "volumeUp/volumeDown/mute: handled by tv.ahk on the TV (2% steps, with a volume bar). Windows does this in Explorer, which the TV does not run.",
+    "standby: the remote's power/sleep key (when it sends the keyboard Sleep key) goes to standby. A power button that Windows handles itself turns the screen off instead (setup step 5).",
     "To check another remote: Settings > Remote Button Test."
   ]
 },

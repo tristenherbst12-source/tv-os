@@ -17,7 +17,8 @@
     "escapeHatch": ["^!+d"],
     "volumeUp":    ["Volume_Up"],
     "volumeDown":  ["Volume_Down"],
-    "mute":        ["Volume_Mute"]
+    "mute":        ["Volume_Mute"],
+    "standby":     ["Sleep"]
   },
   "_notes": [
     "launcher: browser KeyboardEvent values. Each entry matches either e.key or e.code (e.g. 'Enter' or 'NumpadEnter').",
@@ -27,6 +28,7 @@
     "block: swallowed, so Windows does not act on them (the remote's search button opens a Bing search otherwise).",
     "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; media keys are left to the apps.",
     "volumeUp/volumeDown/mute: handled by tv.ahk on the TV (2% steps, with a volume bar). Windows does this in Explorer, which the TV does not run.",
+    "standby: the remote's power/sleep key (when it sends the keyboard Sleep key) goes to standby. A power button that Windows handles itself turns the screen off instead (setup step 5).",
     "To check another remote: Settings > Remote Button Test."
   ]
 }

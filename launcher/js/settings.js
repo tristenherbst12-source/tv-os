@@ -153,7 +153,7 @@
 
   /* ---------- Timers ---------- */
   let timer = { active: false }, timerItem, timerEndsAt = 0;
-  const actionWord = a => a === 'shutdown' ? 'Shuts Down' : 'Sleeps';
+  const actionWord = a => a === 'shutdown' ? 'Shuts Down' : 'Goes to Standby';
   function timerHint() {
     if (!timer.active) return 'Off';
     const left = Math.max(0, Math.round((timerEndsAt - Date.now()) / 60000));
@@ -292,7 +292,7 @@
     group('Timers');
     timerItem = segRow({ name: 'Sleep Timer', hint: 'Off', accent: '#8a6cff',
       labels: ['Off', '30 Min', '60 Min', '90 Min'], values: [0, 30, 60, 90], value: 0, onChange: v => setTimer(v) });
-    segRow({ name: 'When the Timer Ends', accent: '#8a6cff', labels: ['Sleep', 'Shut Down'], values: ['sleep', 'shutdown'], value: s.sleepAction || 'sleep',
+    segRow({ name: 'When the Timer Ends', accent: '#8a6cff', labels: ['Standby', 'Shut Down'], values: ['sleep', 'shutdown'], value: s.sleepAction || 'sleep',
       onChange: async v => {
         await TV.config.saveSettings({ sleepAction: v });
         if (timer.active) setTimer(Math.max(1, Math.ceil((timerEndsAt - Date.now()) / 60000)));

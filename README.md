@@ -76,7 +76,8 @@ Type `SETUP` when it asks, and the `TV` account's Windows password when it asks 
    apps are never touched.
 4. Windows Update: only restarts between 02:00 and 08:00, never in the evening.
 5. Power: never sleeps on its own (the launcher's own Screen Off setting handles the screen), keeps the remote's USB
-   receiver awake and lets its buttons wake the PC from Sleep, no password after waking, hibernation off.
+   receiver awake and lets its buttons wake the PC from Sleep, no password after waking, hibernation off, and the
+   power and sleep buttons only turn the screen off (this PC cannot be woken from Sleep by the remote).
 6. Signs in to `TV` automatically. It always asks for the password (just press Enter if the account has none),
    checks it, and stores it encrypted by Windows, not as plain text. Automatic sign-in is only switched on once the
    password is right.
@@ -128,8 +129,11 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
   Spotify is playing. Any button ends it. Settings > Screensaver changes the time or turns it off.
 - **Settings** has the volume, sound output, sleep timer, screensaver, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
-- **Power** has Sleep, Restart and Shut Down. Any button on the remote wakes the PC from Sleep; from Shut Down it
-  usually cannot (see build-notes), so Sleep is the TV-style standby.
+- **Power** has Standby, Restart and Shut Down. **Standby** is how the TV PC "turns off": the screen goes off, the
+  sound is muted and Spotify pauses, and any button on the remote brings it straight back (this PC cannot be woken
+  from real Sleep by the remote). The remote's power key does the same when it sends the Sleep key. In standby the
+  PC restarts once at 04:00 and goes back to standby, so it starts each day fresh. The Sleep Timer and Screen Off
+  When Idle use standby too. Shut Down needs the PC's own power button to start again.
 
 ## Getting to the Windows desktop
 

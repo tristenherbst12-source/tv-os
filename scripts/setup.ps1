@@ -166,6 +166,12 @@ if (Want 'power') {
     if ($Apply) { $wakeArgs += '-Apply' }
     & powershell.exe @wakeArgs | Where-Object { $_ -match '^\s*\[(would|failed|check)\]' } | Out-Host
     Invoke-Change 'no password after waking from sleep' { & powercfg.exe /setacvalueindex SCHEME_MIN SUB_NONE CONSOLELOCK 0 }
+    # This PC cannot be woken from Sleep by the remote, so nothing may put it to Sleep: the power and sleep buttons
+    # (also the remote's, when Windows handles them) only turn the screen off; the launcher's Standby does the rest.
+    Invoke-Change 'power and sleep buttons turn the screen off (never Sleep: the remote cannot wake the PC from it)' {
+        & powercfg.exe /setacvalueindex SCHEME_MIN SUB_BUTTONS 7648efa3-dd9c-4e3e-b566-50f929386280 4   # power button: turn off the display
+        & powercfg.exe /setacvalueindex SCHEME_MIN SUB_BUTTONS 96996bc0-ad50-47ec-923b-6f41874dd9eb 4   # sleep button: the same
+    }
     Invoke-Change 'apply the plan again' { & powercfg.exe /setactive SCHEME_MIN }
     $hib = Get-RegValue "$HKLM\SYSTEM\CurrentControlSet\Control\Power" 'HibernateEnabled'
     if ($hib -eq 0) { Write-Ok 'hibernation is off' }

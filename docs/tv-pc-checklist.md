@@ -88,11 +88,11 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 - [ ] Wi-Fi and Bluetooth: the Settings page opens in front (Bluetooth may open Windows' "Add a device" instead);
       Home comes back from it. If not, bring back `helper.log`.
 - [ ] Screen Off When Idle: the TV goes to standby, and a remote button wakes it.
-- [ ] Sleep: PC sleeps; a remote button wakes it straight to the home screen (no password). Run setup (step 5)
-      again first: it now lists each remote device as "may wake the PC". If the remote still cannot wake it, check
-      the BIOS (F1 at start): Power > "Enhanced Power Saving Mode" off, and any "USB wake" option on. After a
-      wake, `powercfg /lastwake` in PowerShell shows what woke it.
-- [ ] Sleep timer (set 30 min) really sleeps / shuts down.
+- [ ] Power > Standby: the screen goes off and the sound mutes; any remote button brings the home screen back at
+      once, with the sound as it was. Spotify pauses on standby.
+- [ ] The remote's power button: standby (or at least the screen goes off). Note what Remote Button Test shows for it.
+- [ ] Left in standby overnight: it restarted around 04:00 and is in standby again in the morning.
+- [ ] Sleep timer (set 30 min) goes to standby / shuts down.
 - [ ] Restart and Shut Down work.
 - [ ] **Desktop PIN: set one with the remote, then Windows Desktop with the same PIN opens the desktop.** If it
       says "Wrong PIN", note it: `logs\helper.log` then shows how many digits arrived.
