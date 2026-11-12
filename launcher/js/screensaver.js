@@ -120,8 +120,12 @@ TV.screensaver = (function () {
   }
 
   // Any button ends it (and does nothing else); so does real touchpad movement.
+  // The media keys (play/pause, next, previous) control Spotify and leave the screensaver on; the song shown
+  // updates a moment later.
+  const MEDIA_KEYS = /^Media(PlayPause|Play|Pause|Stop|TrackNext|TrackPrevious)$/;
   window.addEventListener('keydown', e => {
     if (!active) return;
+    if (MEDIA_KEYS.test(e.key)) { setTimeout(drawMusic, 900); setTimeout(drawMusic, 2500); return; }
     e.preventDefault(); e.stopImmediatePropagation();
     stop();
   }, true);

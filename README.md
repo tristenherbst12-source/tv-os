@@ -126,7 +126,7 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
   Finished videos drop off; entries older than 3 weeks too.
 - **Screensaver:** after 5 minutes untouched on the home screen (never while an app is open), or when you press
   Home on the home screen: nature photos (Wikimedia Commons, credited on screen) with the time, date and the song
-  Spotify is playing. Any button ends it. Settings > Screensaver changes the time or turns it off.
+  Spotify is playing. Any button ends it, except play/pause, next and previous, which control Spotify. Settings > Screensaver changes the time or turns it off.
 - **Settings** has the volume, sound output, sleep timer, screensaver, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
 - **Power** has Standby, Restart and Shut Down. **Standby** is how the TV PC "turns off": the screen goes off, the

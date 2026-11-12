@@ -78,6 +78,7 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
 ## Screensaver
 - [ ] Home on the home screen starts it: photos, time, date (and the Spotify song while one plays). Any button
       ends it, and that button does nothing else.
+- [ ] On the screensaver, the remote's play/pause, next and previous keys control Spotify and the screensaver stays.
 - [ ] Left alone on the home screen for 5 minutes: it starts by itself. It never starts while an app is open.
 - [ ] Settings > Screensaver changes the time or turns it off.
 
