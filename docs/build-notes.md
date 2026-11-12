@@ -407,3 +407,12 @@ Netflix's new layout (cards are `a[href="/browse?jbv=<id>"]` in `section.carouse
   Back presses the player's own Close button (shown first: Prime only adds its controls while they show) with a
   real click. Left/Right press the player's skip buttons when the video has no length. Verified: Play > full
   screen with controls, Down/Right along them, Left/Right skip 10 s, OK pauses, Back closes the player.
+
+### Wake from Sleep, round 2 (12 Nov 2026)
+Still no wake on the mini PC after setup armed the keyboard/mouse/consumer/system devices with powercfg. New
+`scripts/wake-check.ps1` (setup step 5 runs it too): reports the sleep states, each keyboard/mouse with the USB chain
+it sits on, the Power Management switches, the armed list, the last wake and recent sleep/wake events, into
+`wake-report.txt`; with `-Apply` it turns "may wake" on for every HID/keyboard/mouse/USB device (WMI
+`MSPower_DeviceWakeEnable`) and turns "may be turned off to save power" off for USB hubs and controllers
+(`MSPower_DeviceEnable`). If it still fails: a USB keyboard in the same port tells receiver limit (keyboard wakes)
+from BIOS/USB power (nothing wakes: BIOS Power > Enhanced Power Saving Mode, USB wake options; another port).

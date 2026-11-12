@@ -159,6 +159,12 @@ if (Want 'power') {
         if ($armed -contains $d) { Write-Ok "may wake the PC: $d" }
         else { Invoke-Change "let '$d' wake the PC from Sleep (remote buttons)" { & powercfg.exe /deviceenablewake $d }.GetNewClosure() }
     }
+    # The same for the HID parts powercfg does not list, and the USB hubs the receiver hangs off (kept powered in
+    # sleep). scripts\wake-check.ps1 does it, and writes wake-report.txt for when the remote still cannot wake it.
+    Write-Info 'remote wake: details in wake-report.txt'
+    $wakeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', (Join-Path $PSScriptRoot 'wake-check.ps1'))
+    if ($Apply) { $wakeArgs += '-Apply' }
+    & powershell.exe @wakeArgs | Where-Object { $_ -match '^\s*\[(would|failed|check)\]' } | Out-Host
     Invoke-Change 'no password after waking from sleep' { & powercfg.exe /setacvalueindex SCHEME_MIN SUB_NONE CONSOLELOCK 0 }
     Invoke-Change 'apply the plan again' { & powercfg.exe /setactive SCHEME_MIN }
     $hib = Get-RegValue "$HKLM\SYSTEM\CurrentControlSet\Control\Power" 'HibernateEnabled'
