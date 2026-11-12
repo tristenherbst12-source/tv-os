@@ -46,7 +46,9 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       to the next row of cards (not onto titles or "See more"), staying in the same column. Right at the end of a row
       does nothing.
 - [ ] OK opens what it is on (Prime Video cards, profile button and its menu too), Back goes back a page.
-- [ ] Trailers that play by themselves (Prime, Netflix banners) do not take over Left/Right.
+- [ ] Trailers that play by themselves (Prime, Netflix banners) do not take over Left/Right, and never go full screen.
+- [ ] Prime Video: Play goes full screen with its controls (Down shows them); Left/Right skip; Back closes the player
+      and returns to the title page.
 - [ ] **Opening a video (OK) goes straight to full screen** (no side list of videos). Left/Right skip 10 s, OK
       pauses/plays.
 - [ ] In full screen, Down shows the controls with the highlight on Pause; Right reaches the gear; OK, Up, OK opens

@@ -393,3 +393,17 @@ Netflix's new layout (cards are `a[href="/browse?jbv=<id>"]` in `section.carouse
   Assets), slim white bar, the number; fades in/out.
 - **DStv logo:** dstv.stream's favicon is a plain cyan shape; `icons/dstv.svg` is the DStv mark cropped (viewBox
   only) from the site's own logo file. `iconKeep` stops setup's icon step replacing it.
+
+### Round 5b (12 Nov 2026): volume pop-up redrawn, Prime Video player (tested signed in)
+- **Volume pop-up:** the window-control version looked flat, showed the page through its bar (whole-window
+  transparency) and clipped the number. Now drawn with GDI+ into a per-pixel-alpha window (`UpdateLayeredWindow`):
+  glass pill with gradient, light edge and soft shadow, blue bar with glow and a knob, speaker icon by level, the
+  number (or "Muted" in place of the bar); fades with the window's constant alpha.
+- **Prime Video:** the title page's muted trailer counted as "started by you" (OK had just opened the page) and went
+  full screen, and the fallback made only the inner video box full screen, leaving Prime's controls out. Now:
+  muted videos after OK count only when OK was on something like Play; full screen presses the nearest own
+  full-screen button (searched outwards from the video), else the biggest box around the video that fits the
+  screen; in full screen the controls belong to the full-screen element when the video box holds no buttons.
+  Back presses the player's own Close button (shown first: Prime only adds its controls while they show) with a
+  real click. Left/Right press the player's skip buttons when the video has no length. Verified: Play > full
+  screen with controls, Down/Right along them, Left/Right skip 10 s, OK pauses, Back closes the player.

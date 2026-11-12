@@ -275,10 +275,15 @@ CheckPointer() {
 }
 
 ; ---------- volume keys (TV only) ----------
-; The volume pop-up: a dark pill near the top of the screen (clear of subtitles), with a speaker icon that shows the
-; level, a slim bar and the number. Fades in and out; never takes focus, clicks pass through it.
-global VolGui := 0, VolIcon := 0, VolTrack := 0, VolFill := 0, VolNum := 0, VolAlpha := 0
-global VolW := 470, VolH := 84, VolBarX := 96, VolBarW := 276
+; The volume pop-up, drawn like the launcher's glass pills: a dark translucent pill with a soft shadow and a light
+; edge, a speaker icon that shows the level, a blue bar with a glow and a knob, and the number. Drawn with GDI+
+; into a per-pixel-alpha window (smooth edges, nothing behind shows through the text), near the top of the screen
+; (clear of subtitles). Fades in and out; never takes focus, clicks pass through it.
+global VolGui := 0, VolAlpha := 0, VolDC := 0, VolBmp := 0, VolOldBmp := 0, VolGdip := 0
+global VolS := A_ScreenHeight / 1080                       ; drawn for 1080p, scaled for other screens
+global VolPad := Round(26 * VolS)                          ; room around the pill for its shadow
+global VolPillW := Round(500 * VolS), VolPillH := Round(88 * VolS)
+global VolW := VolPillW + 2 * VolPad, VolH := VolPillH + 2 * VolPad
 global VolFadeIn := FadeVolume.Bind(+1), VolFadeOut := FadeVolume.Bind(-1)
 VolumeKey(step, *) {
     if (step = 0)
@@ -290,43 +295,147 @@ VolumeKey(step, *) {
     }
     ShowVolume()
 }
+
 ShowVolume() {
-    global VolGui, VolIcon, VolTrack, VolFill, VolNum
+    global VolGui
     if !VolGui {
-        VolGui := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x20 +E0x08000000")   ; click-through, no focus
-        VolGui.BackColor := "121826"
-        VolGui.MarginX := 0, VolGui.MarginY := 0
-        VolGui.SetFont("s25 cFFFFFF", "Segoe MDL2 Assets")                ; Windows' own icon font (speaker)
-        VolIcon := VolGui.Add("Text", "x32 y" (VolH - 40) // 2 " w50 h40 BackgroundTrans", "")
-        ; The bar: a dim track with a white fill on top (plain colour blocks, so it stays crisp on any GPU).
-        VolTrack := VolGui.Add("Text", "x" VolBarX " y" (VolH - 6) // 2 " w" VolBarW " h6 Background3A4560")
-        VolFill := VolGui.Add("Text", "x" VolBarX " y" (VolH - 6) // 2 " w1 h6 BackgroundFFFFFF")
-        VolGui.SetFont("s17 w600 cFFFFFF", "Segoe UI")
-        VolNum := VolGui.Add("Text", "x" (VolBarX + VolBarW + 12) " y" (VolH - 34) // 2 " w58 h34 Right BackgroundTrans", "")
-        VolGui.Show("Hide w" VolW " h" VolH)
-        DllCall("SetWindowRgn", "Ptr", VolGui.Hwnd, "Ptr", DllCall("CreateRoundRectRgn", "Int", 0, "Int", 0, "Int", VolW + 1, "Int", VolH + 1, "Int", VolH, "Int", VolH, "Ptr"), "Int", true)
-        WinSetTransparent(0, VolGui.Hwnd)
+        ; WS_EX_LAYERED (per-pixel alpha) + click-through + never activated.
+        VolGui := Gui("+AlwaysOnTop -Caption +ToolWindow -DPIScale +E0x80000 +E0x20 +E0x08000000")
+        VolGui.Show("NA Hide w" VolW " h" VolH)
+        VolSetUp()
     }
     muted := SoundGetMute(), level := Round(SoundGetVolume())
-    ; Speaker with 0-3 waves by level (Segoe MDL2: E992-E995), crossed out when muted (E74F).
-    VolIcon.Value := Chr(muted ? 0xE74F : level = 0 ? 0xE992 : level < 34 ? 0xE993 : level < 67 ? 0xE994 : 0xE995)
-    fill := muted ? 0 : Round(VolBarW * level / 100)
-    VolFill.Visible := fill > 0
-    if fill
-        VolFill.Move(, , fill)
-    VolNum.Value := muted ? "" : level
-    VolTrack.Opt("+Redraw"), VolFill.Opt("+Redraw")
-    VolGui.Show("NA x" (A_ScreenWidth - VolW) // 2 " y" Round(A_ScreenHeight * 0.06))
+    VolDraw(level, muted)
+    VolGui.Show("NA")
+    VolPresent()
     SetTimer(VolFadeOut, 0)
     SetTimer(VolFadeIn, 15)
-    SetTimer(HideVolume, -1700)
+    SetTimer(HideVolume, -1800)
 }
-; Fades the pop-up in (dir +1, to 235) or out (dir -1, then hides it), a few steps every 15 ms.
+
+; ---- drawing (GDI+ flat API) ----
+VolSetUp() {
+    global VolDC, VolBmp, VolOldBmp, VolGdip
+    DllCall("LoadLibrary", "Str", "gdiplus")
+    si := Buffer(24, 0), NumPut("UInt", 1, si)
+    DllCall("gdiplus\GdiplusStartup", "UPtr*", &tok := 0, "Ptr", si, "Ptr", 0)
+    VolGdip := tok
+    VolDC := DllCall("CreateCompatibleDC", "Ptr", 0, "Ptr")
+    bi := Buffer(40, 0)
+    NumPut("UInt", 40, bi, 0), NumPut("Int", VolW, bi, 4), NumPut("Int", -VolH, bi, 8)
+    NumPut("UShort", 1, bi, 12), NumPut("UShort", 32, bi, 14)
+    VolBmp := DllCall("CreateDIBSection", "Ptr", VolDC, "Ptr", bi, "UInt", 0, "Ptr*", &bits := 0, "Ptr", 0, "UInt", 0, "Ptr")
+    VolOldBmp := DllCall("SelectObject", "Ptr", VolDC, "Ptr", VolBmp, "Ptr")
+}
+
+VolRect(x, y, w, h) {
+    r := Buffer(16), NumPut("Float", x, "Float", y, "Float", w, "Float", h, r)
+    return r
+}
+VolRoundPath(x, y, w, h, rad) {
+    DllCall("gdiplus\GdipCreatePath", "Int", 0, "Ptr*", &p := 0)
+    d := rad * 2
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x, "Float", y, "Float", d, "Float", d, "Float", 180, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x + w - d, "Float", y, "Float", d, "Float", d, "Float", 270, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x + w - d, "Float", y + h - d, "Float", d, "Float", d, "Float", 0, "Float", 90)
+    DllCall("gdiplus\GdipAddPathArc", "Ptr", p, "Float", x, "Float", y + h - d, "Float", d, "Float", d, "Float", 90, "Float", 90)
+    DllCall("gdiplus\GdipClosePathFigure", "Ptr", p)
+    return p
+}
+VolFillRound(g, argb, x, y, w, h, rad) {
+    p := VolRoundPath(x, y, w, h, rad)
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", &b := 0)
+    DllCall("gdiplus\GdipFillPath", "Ptr", g, "Ptr", b, "Ptr", p)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", b), DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+}
+VolText(g, text, family, px, weightBold, argb, x, y, w, h, align) {
+    DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", family, "Ptr", 0, "Ptr*", &fam := 0)
+    if !fam
+        DllCall("gdiplus\GdipCreateFontFamilyFromName", "WStr", "Segoe UI", "Ptr", 0, "Ptr*", &fam := 0)
+    DllCall("gdiplus\GdipCreateFont", "Ptr", fam, "Float", px, "Int", weightBold ? 1 : 0, "Int", 2, "Ptr*", &font := 0)
+    DllCall("gdiplus\GdipCreateStringFormat", "Int", 0x1000, "Int", 0, "Ptr*", &fmt := 0)   ; 0x1000: no clipping
+    DllCall("gdiplus\GdipSetStringFormatAlign", "Ptr", fmt, "Int", align)                  ; 0 left, 1 centre, 2 right
+    DllCall("gdiplus\GdipSetStringFormatLineAlign", "Ptr", fmt, "Int", 1)                  ; centred vertically
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", argb, "Ptr*", &b := 0)
+    DllCall("gdiplus\GdipDrawString", "Ptr", g, "WStr", text, "Int", -1, "Ptr", font, "Ptr", VolRect(x, y, w, h), "Ptr", fmt, "Ptr", b)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", b), DllCall("gdiplus\GdipDeleteStringFormat", "Ptr", fmt)
+    DllCall("gdiplus\GdipDeleteFont", "Ptr", font), DllCall("gdiplus\GdipDeleteFontFamily", "Ptr", fam)
+}
+
+VolDraw(level, muted) {
+    s := VolS, x0 := VolPad, y0 := VolPad, w := VolPillW, h := VolPillH, rad := h / 2
+    DllCall("gdiplus\GdipCreateFromHDC", "Ptr", VolDC, "Ptr*", &g := 0)
+    DllCall("gdiplus\GdipSetSmoothingMode", "Ptr", g, "Int", 4)              ; anti-aliased shapes
+    DllCall("gdiplus\GdipSetTextRenderingHint", "Ptr", g, "Int", 4)          ; anti-aliased text (works on alpha)
+    DllCall("gdiplus\GdipGraphicsClear", "Ptr", g, "UInt", 0)
+
+    ; Soft shadow: a few widening, fading copies of the pill under it.
+    loop 8 {
+        e := (9 - A_Index) * 2.6 * s
+        VolFillRound(g, (Round(6 + A_Index * 2.2) << 24), x0 - e, y0 - e + 6 * s, w + 2 * e, h + 2 * e, rad + e)
+    }
+    ; The pill: a deep blue-grey glass gradient, nearly opaque so the picture behind does not fight the text.
+    p := VolRoundPath(x0, y0, w, h, rad)
+    DllCall("gdiplus\GdipCreateLineBrushFromRect", "Ptr", VolRect(x0, y0, w, h), "UInt", 0xF2262F4A, "UInt", 0xF2121726, "Int", 1, "Int", 0, "Ptr*", &lb := 0)
+    DllCall("gdiplus\GdipFillPath", "Ptr", g, "Ptr", lb, "Ptr", p)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", lb)
+    ; A light edge, brighter along the top, as on the launcher's glass.
+    DllCall("gdiplus\GdipCreateLineBrushFromRect", "Ptr", VolRect(x0, y0, w, h), "UInt", 0x66FFFFFF, "UInt", 0x14FFFFFF, "Int", 1, "Int", 0, "Ptr*", &eb := 0)
+    DllCall("gdiplus\GdipCreatePen2", "Ptr", eb, "Float", 1.4 * s, "Int", 2, "Ptr*", &pen := 0)
+    DllCall("gdiplus\GdipDrawPath", "Ptr", g, "Ptr", pen, "Ptr", p)
+    DllCall("gdiplus\GdipDeletePen", "Ptr", pen), DllCall("gdiplus\GdipDeleteBrush", "Ptr", eb), DllCall("gdiplus\GdipDeletePath", "Ptr", p)
+
+    ; Speaker icon (Windows' own icon font): 0-3 waves by level, crossed out when muted.
+    icon := Chr(muted ? 0xE74F : level = 0 ? 0xE992 : level < 34 ? 0xE993 : level < 67 ? 0xE994 : 0xE995)
+    VolText(g, icon, "Segoe MDL2 Assets", 36 * s, false, muted ? 0xFFFF8A9C : 0xFFFFFFFF, x0 + 26 * s, y0, 52 * s, h, 1)
+
+    ; The bar: a dim track, then the level in blue with a soft glow and a white knob.
+    bx := x0 + 98 * s, bw := 300 * s, bh := 8 * s, by := y0 + (h - bh) / 2
+    if muted {                                                            ; no bar: just the word
+        VolText(g, "Muted", "Segoe UI", 26 * s, true, 0xFFFFFFFF, bx, y0, bw, h, 0)
+        DllCall("gdiplus\GdipDeleteGraphics", "Ptr", g)
+        return
+    }
+    VolFillRound(g, 0x2EFFFFFF, bx, by, bw, bh, bh / 2)
+    fill := muted ? 0 : bw * level / 100
+    if (fill > 0) {
+        loop 4 {                                                          ; glow
+            e := (5 - A_Index) * 2.2 * s
+            VolFillRound(g, ((10 + A_Index * 9) << 24) | 0x508CFF, bx - e, by - e, fill + 2 * e, bh + 2 * e, bh / 2 + e)
+        }
+        DllCall("gdiplus\GdipCreateLineBrushFromRect", "Ptr", VolRect(bx, by, Max(fill, 1), bh), "UInt", 0xFF4F86FF, "UInt", 0xFF9CC2FF, "Int", 0, "Int", 0, "Ptr*", &fb := 0)
+        fp := VolRoundPath(bx, by, Max(fill, bh), bh, bh / 2)
+        DllCall("gdiplus\GdipFillPath", "Ptr", g, "Ptr", fb, "Ptr", fp)
+        DllCall("gdiplus\GdipDeleteBrush", "Ptr", fb), DllCall("gdiplus\GdipDeletePath", "Ptr", fp)
+    }
+    kr := 9 * s, kx := bx + fill - kr, ky := by + bh / 2 - kr
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", 0x40000000, "Ptr*", &kb := 0)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", g, "Ptr", kb, "Float", kx - 1 * s, "Float", ky + 1.5 * s, "Float", 2 * kr + 2 * s, "Float", 2 * kr + 2 * s)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", kb)
+    DllCall("gdiplus\GdipCreateSolidFill", "UInt", muted ? 0xFF8A93A8 : 0xFFFFFFFF, "Ptr*", &kb := 0)
+    DllCall("gdiplus\GdipFillEllipse", "Ptr", g, "Ptr", kb, "Float", kx, "Float", ky, "Float", 2 * kr, "Float", 2 * kr)
+    DllCall("gdiplus\GdipDeleteBrush", "Ptr", kb)
+
+    ; The number (or "Muted"), right of the bar, with room to spare so it is never cut off.
+    VolText(g, String(level), "Segoe UI", 26 * s, true, 0xFFFFFFFF, bx + bw + 14 * s, y0, w - (bx - x0) - bw - 14 * s - 30 * s, h, 2)
+    DllCall("gdiplus\GdipDeleteGraphics", "Ptr", g)
+}
+
+; Puts the drawn picture on screen at the current fade level.
+VolPresent() {
+    pt := Buffer(8), NumPut("Int", (A_ScreenWidth - VolW) // 2, "Int", Round(A_ScreenHeight * 0.05) - VolPad, pt)
+    sz := Buffer(8), NumPut("Int", VolW, "Int", VolH, sz)
+    src := Buffer(8, 0)
+    blend := (VolAlpha << 16) | (1 << 24)                                  ; AC_SRC_OVER, constant alpha, AC_SRC_ALPHA
+    DllCall("UpdateLayeredWindow", "Ptr", VolGui.Hwnd, "Ptr", 0, "Ptr", pt, "Ptr", sz, "Ptr", VolDC, "Ptr", src, "UInt", 0, "UInt*", blend, "UInt", 2)
+}
+
+; Fades the pop-up in (dir +1) or out (dir -1, then hides it), a few steps every 15 ms.
 FadeVolume(dir) {
     global VolAlpha
-    VolAlpha := Max(0, Min(235, VolAlpha + dir * 47))
-    try WinSetTransparent(VolAlpha, VolGui.Hwnd)
-    if (dir > 0 && VolAlpha >= 235) || (dir < 0 && VolAlpha <= 0) {
+    VolAlpha := Max(0, Min(255, VolAlpha + dir * 51))
+    try VolPresent()
+    if (dir > 0 && VolAlpha >= 255) || (dir < 0 && VolAlpha <= 0) {
         SetTimer(, 0)
         if (dir < 0)
             VolGui.Hide()

@@ -426,6 +426,7 @@
 
   function move(dir) {
     relocate();
+    if (beforeOk && beforeOk.href && beforeOk.href !== location.href) beforeOk = null;   // a new page: no menu open
     const fromEl = current && current.isConnected ? current : null;
     // Where the highlight is. If that thing vanished when it got focus (Prime's search icon turns into a search
     // box), carry on from where it was.
@@ -645,7 +646,7 @@
       const play = el.querySelector('button[aria-label^="Play" i], button[aria-label^="Pause" i]');
       if (play) { press(play); return; }
     }
-    beforeOk = { el, seen: new Set(candidates()) };
+    beforeOk = { el, seen: new Set(candidates()), href: location.href };
     setTimeout(() => followAfterOk(el), 450);
     const v = visibleBox(el);
     const l = Math.max(v.left, 0), r = Math.min(v.right, innerWidth), t = Math.max(v.top, 0), btm = Math.min(v.bottom, innerHeight);
@@ -680,7 +681,7 @@
       if (!play && tries < 4) { setTimeout(() => followAfterOk(el, tries + 1), 350); return; }   // still sliding in
       const pick = play ||
         inPop.slice().sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
-      if (pick) { beforeOk = { el: pick, seen: beforeOk.seen }; anchorX = null; select(pick); return; }
+      if (pick) { beforeOk = { el: pick, seen: beforeOk.seen, href: location.href }; anchorX = null; select(pick); return; }
     }
     const b = el.isConnected ? el.getBoundingClientRect() : null;
     if (b && b.width > 1 && b.height > 1 && el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
@@ -729,6 +730,9 @@
     if (!ok || typeof ok !== 'object' || Date.now() - ok.t >= 12000) return false;
     return ok.play || ok.href !== location.href;
   }
+  function okWasPlay() {
+    try { const ok = JSON.parse(sessionStorage.getItem(OK_KEY) || 'null'); return !!(ok && ok.play); } catch (e) { return false; }
+  }
   const PLAYISH = /\b(play|watch|resume|continue|start|episode|ep\s?\d|live|stream|trailer)/i;
   function playish(el) {
     if (!el || !el.isConnected) return true;
@@ -776,13 +780,56 @@
       if (r.width * r.height > area) { area = r.width * r.height; big = v; }
     }
     const pl = big && playerOf(big);
-    return pl && fs.contains(pl) ? pl : fs;
+    // (only when that box holds the controls: Prime Video's video box is a layer of its own, its controls beside it)
+    return pl && fs.contains(pl) && pl.querySelector('button, [role=button]') ? pl : fs;
+  }
+  // A real click on a player button that may be hidden until the pointer moves (Prime Video ignores made-up
+  // clicks): the pointer goes onto it first, which shows the controls, then the click.
+  function realPress(el) {
+    if (typeof window.tvnavClick !== 'function') { press(el); return; }
+    const at = () => { const b = el.getBoundingClientRect(); return { x: b.left + b.width / 2, y: b.top + b.height / 2 }; };
+    ignoreMouseUntil = performance.now() + 1500;
+    window.tvnavClick(JSON.stringify(Object.assign(at(), { move: true })));
+    setTimeout(() => { if (el.isConnected) window.tvnavClick(JSON.stringify(at())); }, 350);
+  }
+  // The player's own close button ("Close player", "Close/Back"), if it has one.
+  function closePlayerButton(scope) {
+    return [...(scope || document).querySelectorAll('button, [role=button]')].find(b =>
+      /^(close( player| video)?|close\/back|exit( player)?)$/i.test((b.getAttribute('aria-label') || b.title || '').trim())) || null;
+  }
+  // The player's own "skip back / forward 10 seconds" button, if it has one.
+  function skipButton(dir) {
+    const re = dir === 'right' ? /\b(forward|ahead)\b|fast.?forward/i : /\b(back(ward)?|rewind|replay)\b/i;
+    const scope = document.fullscreenElement || document;
+    // (labels such as "Skip forward 10 seconds": a direction and a number of seconds, so "Back to Browse" never counts)
+    return [...scope.querySelectorAll('button, [role=button]')].find(b => {
+      const l = b.getAttribute('aria-label') || b.title || '';
+      return re.test(l) && /\d|second/i.test(l);
+    }) || null;
+  }
+  // The site's own full-screen button for this video: the nearest one, looking further out from the video.
+  function fsButtonFor(v) {
+    for (let p = v.parentElement, i = 0; p && p !== document.body && i < 12; p = p.parentElement, i++) {
+      const b = [...p.querySelectorAll(FS_BUTTONS)].find(x => !/exit/i.test((x.getAttribute('aria-label') || '') + (x.title || '')));
+      if (b) return b;
+    }
+    return null;
+  }
+  // What to make full screen when there is no button: the biggest box around the video that still fits the screen
+  // (the whole player with its controls, not just the picture).
+  function fsTarget(v) {
+    let best = playerOf(v);
+    for (let p = v.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      const r = p.getBoundingClientRect();
+      if (r.width > innerWidth * 1.02 || r.height > innerHeight * 1.02) break;
+      if (p.contains(best)) best = p;
+    }
+    return best;
   }
   function goFullscreen(v) {
     if (document.fullscreenElement) return;
-    const player = playerOf(v);
-    const scope = player.parentElement || document;
-    const btn = [...scope.querySelectorAll(FS_BUTTONS)].find(b => !/exit/i.test((b.getAttribute('aria-label') || '') + (b.title || '')));
+    const player = fsTarget(v);
+    const btn = fsButtonFor(v);
     window.__tvnavGesture = () => {
       if (document.fullscreenElement) return;
       if (btn && btn.isConnected) btn.click();
@@ -878,11 +925,26 @@
       if (document.fullscreenElement) {
         // On the controls: hide them (back to watching). Watching: leave the video, back to where you came from.
         if (usingKeys) { hideControls(); return; }
-        document.exitFullscreen().catch(() => {});
-        if (fullscreenByOk && history.length > 1) history.back();
+        // A player drawn over the page (Prime Video, DStv) closes with its own button; others are a page of their own.
+        // (Prime Video only adds its controls while they show: bring them up and look again.)
+        const byOk = fullscreenByOk;
         fullscreenByOk = false;
+        const leave = close => {
+          if (close) {
+            realPress(close);
+            setTimeout(() => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }, 900);
+          } else {
+            document.exitFullscreen().catch(() => {});
+            if (byOk && history.length > 1) history.back();
+          }
+        };
+        const close = closePlayerButton(document.fullscreenElement);
+        if (close) leave(close);
+        else { showControls(); setTimeout(() => leave(document.fullscreenElement && closePlayerButton(document.fullscreenElement)), 450); }
         return;
       }
+      const close = bigPlayingVideo() && closePlayerButton(document);
+      if (close) { realPress(close); return; }
       if (history.length > 1) history.back();
       return;
     }
@@ -891,6 +953,9 @@
       if (typing && (dir === 'left' || dir === 'right')) return;     // move the caret
       if (nativePlayer() && !usingKeys && (dir === 'left' || dir === 'right')) return;   // Netflix seeks itself
       const watching = !usingKeys && (bigPlayingVideo() || (document.fullscreenElement && bigVideo()));
+      // Players that do not say how long the video is (Prime Video) but have their own skip buttons: press those.
+      const skip = watching && (dir === 'left' || dir === 'right') && !isFinite(watching.duration) && skipButton(dir);
+      if (skip) { e.preventDefault(); e.stopPropagation(); press(skip); return; }
       // (not on live streams, which have no length to skip through)
       if (watching && isFinite(watching.duration) && (dir === 'left' || dir === 'right')) {
         e.preventDefault(); e.stopPropagation();
@@ -949,6 +1014,9 @@
   function videoStarted(v) {
     seenStart.add(v);
     if (NETFLIX && !nativePlayer()) return;          // trailers in Netflix's panels are never "yours"
+    // A muted trailer starting on the page OK opened (Prime Video's title pages) is not one you started; one you
+    // pressed Play for is (it starts with sound).
+    if (v.muted && okRecently() && !okWasPlay() && !(document.fullscreenElement && document.fullscreenElement.contains(v))) return;
     if (okRecently() || (document.fullscreenElement && document.fullscreenElement.contains(v))) userVideos.add(v);
     if (userVideos.has(v)) startedBig(v, okRecently(), 0);
   }
