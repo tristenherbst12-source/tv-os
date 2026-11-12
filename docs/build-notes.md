@@ -362,3 +362,18 @@ keyboard in S5" option (to check on the M73: Power menu). Sleep draws about 1-2 
   forests, sunsets and landscapes (wide ones only, about 300), fetched by the page (Commons allows `origin=*`) at
   most once a day and kept in localStorage; credited on screen. Time, date and the Spotify song (helper
   `/now-playing`). Any key ends it and is swallowed; real pointer movement too.
+
+### Netflix, tested signed in (12 Nov 2026)
+Netflix's new layout (cards are `a[href="/browse?jbv=<id>"]` in `section.carousel-row`, unlabelled edge arrows):
+- **Every other film was skipped**: links were grouped by address without the query, so neighbouring films (all
+  `/browse?...`) were merged as "one card". `linkKey` now keeps the query (minus tracking and playlist extras).
+- The unlabelled edge arrow is not a stop; paging presses it by position (narrow clickable strip at the row edge).
+  Cards under it are not "covered". When Netflix rebuilds a row after paging, the highlight moves to the same
+  film's new copy in that row (`relocate`).
+- The film panel's title area (logo plus Resume / + / Like) looked like a picture tile and swallowed its buttons:
+  a box with 3+ visible buttons is never a tile. OK on a card now moves into the panel, onto Play / Resume (waiting
+  while it slides in).
+- Netflix starts its video before attaching it to the page, so the `play` event never reached the page: a 1 s check
+  for playing videos now catches it, and OK > Play goes straight to full screen. Trailers in panels never count.
+- Verified: rows (Right one film at a time with paging, Left back, Left on the first film stops), panel, Resume >
+  full screen, Left/Right skip 10 s (Netflix's own), OK pauses, Back returns to the panel.

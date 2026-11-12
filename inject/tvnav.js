@@ -40,7 +40,27 @@
     (document.body || document.documentElement).appendChild(ring);
     return ring;
   }
+  /* The highlighted thing was replaced by a copy (Netflix rebuilds a row's cards when it pages): carry on from the
+     copy, the same link nearest to where it was. */
+  function relocate() {
+    if (!current || current.isConnected || !current.getAttribute) return;
+    const href = current.getAttribute('href'), label = current.getAttribute('aria-label');
+    if (!href && !label) return;
+    // In the same row if that is still there (the same film is often in several rows), else on the same level.
+    const row = rowKey(current);
+    const scope = row && row.isConnected ? row : document;
+    let best = null, dist = Infinity;
+    for (const c of scope.querySelectorAll(href ? 'a[href]' : '[aria-label]')) {
+      if (href ? c.getAttribute('href') !== href : c.getAttribute('aria-label') !== label) continue;
+      const b = c.getBoundingClientRect();
+      if (b.width < 2) continue;
+      const d = lastBox ? Math.abs(b.left - lastBox.left) + 10 * Math.abs(b.top - lastBox.top) : 0;
+      if (d < dist) { dist = d; best = c; }
+    }
+    if (best) { current = best; lastBox = best.getBoundingClientRect(); try { best.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
   function drawRing() {
+    relocate();
     const r = ensureRing();
     if (!current || !current.isConnected || !usingKeys) { r.style.display = 'none'; return; }
     const b = current.getBoundingClientRect();
@@ -88,7 +108,8 @@
       // readers, and those are exactly what a TV remote should land on.)
       if (el.disabled) continue;
       // Netflix's row arrows are not stops: Right at the end of the screen pages the row on by itself.
-      if (NETFLIX && (/(^|\s)handle/.test(String(el.className)) || /^see (more|previous) titles/i.test(el.getAttribute('aria-label') || ''))) continue;
+      if (NETFLIX && (/(^|\s)handle/.test(String(el.className)) || /^see (more|previous) titles/i.test(el.getAttribute('aria-label') || '') ||
+          (el.tagName === 'DIV' && el.closest('.carousel-row, .lolomoRow') && !el.querySelector('img')))) continue;
       const b = el.getBoundingClientRect();
       if (b.width < 12 || b.height < 12) continue;
       // Whole rows or panels made focusable (Spotify does this) are containers, not things to press.
@@ -252,6 +273,11 @@
       for (let i = 0; p && i < 5 && p !== document.body; i++, p = p.parentElement) {
         const b = p.getBoundingClientRect(), pa = b.width * b.height;
         if (pa > innerWidth * innerHeight * 0.3 || b.width > innerWidth * 0.6) break;
+        // A box with a row of its own buttons (Netflix's title panel: Resume, +, Like) is not one tile.
+        if ([...p.querySelectorAll('a[href], button, [role=button]')].filter(x => {
+          const r = x.getBoundingClientRect();
+          return r.width >= 12 && r.height >= 12 && x.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+        }).length >= 3) break;
         if (pa >= area * 3 && getComputedStyle(p).cursor === 'pointer' && bigPicture(p, pa)) { found = p; }
       }
     }
@@ -324,6 +350,9 @@
     }
     const hit = document.elementFromPoint(x, y);
     if (!hit || hit === el || el.contains(hit) || hit === ring) return false;
+    // Under a row's own edge arrow (Netflix) it is the next card to page to, not hidden for good.
+    const strip = hit.closest('div');
+    if (NETFLIX && strip && strip.closest('.carousel-row, .lolomoRow') && strip.getBoundingClientRect().width < 90) return false;
     // A text box under its own floating label (Netflix's sign-in) is not covered.
     const label = hit.closest('label');
     if (label && (label.control === el || label.contains(el) || (el.labels && [...el.labels].includes(label)))) return false;
@@ -347,7 +376,10 @@
     try {
       const u = new URL(a.href);
       if (u.hash && u.pathname === location.pathname) return null;        // in-page links
-      return u.origin + u.pathname + (u.searchParams.get('v') ? '?v=' + u.searchParams.get('v') : '');
+      // The query counts (Netflix's films are all /browse?jbv=<id>), except tracking and playlist extras.
+      const keep = [...u.searchParams].filter(([k]) => !/^(utm_.*|pp|si|feature|t|start_radio|index|list|tctx|track.*)$/i.test(k))
+        .map(([k, v]) => k + '=' + v).sort().join('&');
+      return u.origin + u.pathname + (keep ? '?' + keep : '');
     } catch (e) { return null; }
   }
 
@@ -393,6 +425,7 @@
   let anchorX = null;
 
   function move(dir) {
+    relocate();
     const fromEl = current && current.isConnected ? current : null;
     // Where the highlight is. If that thing vanished when it got focus (Prime's search icon turns into a search
     // box), carry on from where it was.
@@ -573,7 +606,7 @@
 
   // How many pages a row has been moved on (by revealInCarousel), so Left never wraps past its start.
   const rowPages = new WeakMap();
-  function rowKey(el) { return el.closest('.lolomoRow, .rowContainer, [data-list-context], .slider') || el.parentElement; }
+  function rowKey(el) { return el.closest('.carousel-row, .lolomoRow, .rowContainer, [data-list-context], .slider') || el.parentElement; }
 
   /* A carousel that moves its cards itself (no scrolling): press its own next/previous arrow until the card shows. */
   function revealInCarousel(el, tries = 0) {
@@ -586,8 +619,14 @@
     for (let i = 0; row && i < 8; row = row.parentElement, i++) {
       const btn = [...row.querySelectorAll('button, [role=button]')].find(x =>
         words.test((x.getAttribute('aria-label') || '') + ' ' + (x.title || '') + ' ' + x.className) && !x.contains(el));
-      if (btn) {
-        press(btn);
+      // (or an unlabelled arrow: a narrow clickable strip at that edge of the row, as Netflix has)
+      const strip = btn ? null : [...row.querySelectorAll('div, span')].find(x => {
+        if (x.contains(el) || getComputedStyle(x).cursor !== 'pointer' || x.querySelector('img')) return false;
+        const r = x.getBoundingClientRect(), rb = row.getBoundingClientRect();
+        return r.width < 90 && r.height > 60 && (right ? r.right >= Math.min(rb.right, innerWidth) - 8 : r.left <= Math.max(rb.left, 0) + 8);
+      });
+      if (btn || strip) {
+        press(btn || strip);
         const key = rowKey(el);
         rowPages.set(key, (rowPages.get(key) || 0) + (right ? 1 : -1));
         setTimeout(() => revealInCarousel(el, tries + 1), 500);
@@ -626,8 +665,23 @@
 
   // OK replaced what was highlighted with something new (a sub-menu, the next step of a form): the highlight
   // goes to the nearest new item, as on a TV, instead of being left on nothing.
-  function followAfterOk(el) {
-    if (current !== el || !beforeOk || beforeOk.el !== el) return;
+  function followAfterOk(el, tries = 0) {
+    // (a copy of el counts: Netflix rebuilds the cards behind the panel it opens)
+    const same = x => x === el || (x && x.getAttribute && el.getAttribute('href') && x.getAttribute('href') === el.getAttribute('href'));
+    relocate();
+    if (!same(current) || !beforeOk || !same(beforeOk.el)) return;
+    el = current;
+    // OK opened a pop-up (Netflix's film panel): into it, on its Play / Resume button if it has one.
+    const pop = !document.fullscreenElement && openPopup();
+    if (pop && !pop.contains(el)) {
+      const inPop = candidates().filter(c => pop.contains(c));
+      const name = c => ((c.getAttribute('aria-label') || '') + ' ' + c.textContent).trim();
+      const play = inPop.find(c => /^(play|resume|watch)\b/i.test(name(c)));
+      if (!play && tries < 4) { setTimeout(() => followAfterOk(el, tries + 1), 350); return; }   // still sliding in
+      const pick = play ||
+        inPop.slice().sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
+      if (pick) { beforeOk = { el: pick, seen: beforeOk.seen }; anchorX = null; select(pick); return; }
+    }
     const b = el.isConnected ? el.getBoundingClientRect() : null;
     if (b && b.width > 1 && b.height > 1 && el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
     const from = lastBox || { left: 0, top: 0, right: 0, bottom: 0 };
@@ -880,19 +934,32 @@
   }, true);
 
   // When a big video you started begins, the highlight steps aside so Left/Right seek; Up/Down bring it back.
-  document.addEventListener('play', e => {
-    const v = e.target;
-    if (!(v instanceof HTMLVideoElement)) return;
+  const seenStart = new WeakSet();
+  document.addEventListener('play', e => { if (e.target instanceof HTMLVideoElement) videoStarted(e.target); }, true);
+  // (Netflix starts its video before adding it to the page, so that start never reaches this page: look too.)
+  setInterval(() => {
+    for (const v of document.querySelectorAll('video')) if (!v.paused && !seenStart.has(v)) videoStarted(v);
+  }, 1000);
+  document.addEventListener('pause', e => { if (e.target instanceof HTMLVideoElement) seenStart.delete(e.target); }, true);
+  function videoStarted(v) {
+    seenStart.add(v);
+    if (NETFLIX && !nativePlayer()) return;          // trailers in Netflix's panels are never "yours"
     if (okRecently() || (document.fullscreenElement && document.fullscreenElement.contains(v))) userVideos.add(v);
-    if (share(v) > BIG && userVideos.has(v)) {
+    if (userVideos.has(v)) startedBig(v, okRecently(), 0);
+  }
+  // (The player may still be growing to its full size when the video starts, as Netflix's does: look again.)
+  function startedBig(v, byOk, tries) {
+    if (v.paused) return;
+    if (share(v) <= BIG) { if (tries < 12) setTimeout(() => startedBig(v, byOk, tries + 1), 500); return; }
+    {
       usingKeys = false; drawRing();
       // Opened with OK: straight to full screen, as a TV app plays a video (once per page, so leaving full
       // screen yourself sticks).
-      if (okRecently() && !document.fullscreenElement && autoFsDoneFor !== location.href) {
+      if (byOk && !document.fullscreenElement && autoFsDoneFor !== location.href) {
         autoFsDoneFor = location.href;
         fullscreenByOk = true;
         setTimeout(() => { if (!v.paused) goFullscreen(v); }, 400);
       }
     }
-  }, true);
+  }
 })();
