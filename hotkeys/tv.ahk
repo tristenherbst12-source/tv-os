@@ -495,9 +495,9 @@ if !Windowed {
     SetTimer(CheckPointer, 150)
     ; Volume keys: only on the TV (on a normal PC, Windows' own volume keys and display stay in charge).
     for k in JsonArray(km, "global", "volumeUp")
-        try Hotkey("$" k, VolumeKey.Bind(2))
+        try Hotkey("$" k, VolumeKey.Bind(1))
     for k in JsonArray(km, "global", "volumeDown")
-        try Hotkey("$" k, VolumeKey.Bind(-2))
+        try Hotkey("$" k, VolumeKey.Bind(-1))
     for k in JsonArray(km, "global", "mute")
         try Hotkey("$" k, VolumeKey.Bind(0))
 }
