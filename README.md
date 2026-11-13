@@ -130,9 +130,8 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 - **Settings** has the volume, sound output, sleep timer, screensaver, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
 - **Power** has Standby, Restart and Shut Down. **Standby** is how the TV PC "turns off": the screen goes off, the
-  sound is muted and Spotify pauses, and any button on the remote (or moving the pointer) brings it straight back
-  (this PC cannot be woken from real Sleep by the remote). The signals the remote sends by itself while it sleeps
-  do not count. The remote's power key does the same when it sends the Sleep key. In standby the
+  sound is muted and Spotify pauses, and any button on the remote brings it straight back (this PC cannot be woken
+  from real Sleep by the remote). The remote's power key does the same when it sends the Sleep key. In standby the
   PC restarts once at 04:00 and goes back to standby, so it starts each day fresh. The Sleep Timer and Screen Off
   When Idle use standby too. Shut Down needs the PC's own power button to start again.
 

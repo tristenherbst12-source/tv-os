@@ -5,8 +5,7 @@
 ; - Pointer:          hidden while the remote's buttons are used (not with -Windowed).
 ; - Volume keys:      change the volume, with a small volume bar (not with -Windowed). Windows normally does this
 ;                     in Explorer, which does not run on the TV, so without this the volume buttons do nothing.
-; - Standby:        tells the helper when a real button press, click or pointer movement should end standby.
-; - Escape hatch:    Ctrl+Alt+Shift+D by default: start the Windows desktop (asks for the PIN when one is set).
+; - Escape hatch:     Ctrl+Alt+Shift+D by default: start the Windows desktop (asks for the PIN when one is set).
 ; - While the launcher is in front, every key is reported to the helper for the key-test page.
 ; Keys come from config/keymap.json ("global" section, AutoHotkey key names).
 ;   AutoHotkey64.exe tv.ahk [-Windowed]     (-Windowed: testing on a desktop PC, see scripts/start.ps1)
@@ -260,8 +259,6 @@ HidePointer() {
 ; brings the pointer back.
 CheckPointer() {
     global PointerHidden
-    if InStandby
-        return
     touched := A_TimeIdleMouse < 200
     if PointerHidden {
         if touched {
@@ -451,70 +448,6 @@ HideVolume() {
     }
 }
 
-; ---------- standby: only a real button press brings the TV back ----------
-; The helper asks Windows for the last input, and Windows also counts the empty reports the remote's receiver
-; sends now and then while the remote sleeps. So the helper leaves the decision to this script: physical key
-; presses (A_TimeIdleKeyboard ignores input made by programs), clicks, and pointer movement of more than 40 px.
-; The pointer waits in the middle of the screen during standby, so movement in any direction shows.
-global InStandby := false, StandbyFrom := 0, StandbyX := 0, StandbyY := 0
-WatchStandby() {
-    global InStandby, StandbyFrom, StandbyX, StandbyY
-    if !InStandby {
-        r := HelperCall("GET", "/standby/watch")
-        if !RegExMatch(r, '"standby"\s*:\s*true')
-            return
-        InStandby := true, StandbyFrom := A_TickCount
-        StandbyX := A_ScreenWidth // 2, StandbyY := A_ScreenHeight // 2
-        DllCall("SetCursorPos", "Int", StandbyX, "Int", StandbyY)
-        SetTimer(WatchStandby, 100)                 ; quick while in standby
-        return
-    }
-    since := A_TickCount - StandbyFrom
-    if (since < 1500)                               ; the press that started it
-        return
-    why := ""
-    if (A_TimeIdleKeyboard < since - 1500)
-        why := "button " A_PriorKey
-    else if (A_TimeIdleMouse < since - 1500) {
-        CoordMode("Mouse", "Screen")
-        MouseGetPos(&x, &y)
-        if (Abs(x - StandbyX) > 40 || Abs(y - StandbyY) > 40)
-            why := "pointer moved"
-        else if (GetKeyState("LButton", "P") || GetKeyState("RButton", "P"))
-            why := "click"
-    }
-    if (why = "") {
-        static polled := 0
-        if (A_TickCount - polled > 1000) {           ; still in standby? (it can also end another way)
-            polled := A_TickCount
-            if !RegExMatch(HelperCall("GET", "/standby/watch"), '"standby"\s*:\s*true')
-                EndStandbyWatch()
-        }
-        return
-    }
-    HelperCall("POST", "/standby/wake", '{"reason":' JsonStr(why) '}')
-    EndStandbyWatch()
-}
-EndStandbyWatch() {
-    global InStandby
-    InStandby := false
-    if PointerHidden
-        DllCall("SetCursorPos", "Int", ParkX, "Int", ParkY)
-    SetTimer(WatchStandby, 1000)
-}
-StandbyClick(*) {
-    if (InStandby && A_TickCount - StandbyFrom > 1500) {
-        HelperCall("POST", "/standby/wake", '{"reason":"click"}')
-        EndStandbyWatch()
-    }
-}
-; The remote's power key: standby, or back from standby when pressed again.
-StandbyKey(*) {
-    if InStandby
-        return                                      ; WatchStandby sees the press and ends standby
-    HelperCall("POST", "/power/standby", "", true)
-}
-
 ; ---------- key feed for the key-test page ----------
 OnKeyDown(ih, vk, sc) {
     if !Windowed
@@ -540,7 +473,7 @@ for k in JsonArray(km, "global", "block")
 ; The remote's power / sleep button: standby (screen off, muted; any button brings it back). Real Sleep is not
 ; used: the remote cannot wake this PC from it.
 for k in JsonArray(km, "global", "standby")
-    try Hotkey("$" k, StandbyKey)
+    try Hotkey("$" k, (*) => HelperCall("POST", "/power/standby", "", true))
 HotIf(BackApplies)
 for k in JsonArray(km, "global", "back")
     try Hotkey("$" k, BackDown)
@@ -555,12 +488,6 @@ ih := InputHook("V L0 I")
 ih.KeyOpt("{All}", "N")
 ih.OnKeyDown := OnKeyDown
 ih.Start()
-
-InstallKeybdHook()                      ; needed for A_TimeIdleKeyboard (physical presses only)
-InstallMouseHook()                      ; and A_TimeIdleMouse
-Hotkey("~*LButton", StandbyClick)
-Hotkey("~*RButton", StandbyClick)
-SetTimer(WatchStandby, 1000)
 
 if !Windowed {
     InstallMouseHook()                  ; needed for A_TimeIdleMouse
