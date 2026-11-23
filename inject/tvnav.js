@@ -155,7 +155,8 @@
       // Whole rows or panels made focusable (Spotify does this) are containers, not things to press.
       if (b.width > vw * 1.1 || b.width * b.height > vw * vh * 0.6) continue;
       if (b.bottom < -vh * 1.5 || b.top > vh * 2.5 || b.right < -vw || b.left > vw * 2) continue;
-      if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      if (el.checkVisibility && !el.checkVisibility({ opacityProperty: true, visibilityProperty: true }) &&
+          !hoverOverPicture(el, b)) continue;
       if (!(paints(el) || clickLayer(el, b)) || covered(el, b)) continue;
       out.push(el);
     }
@@ -288,7 +289,9 @@
   function hoverPreview(d) { return /mini-modal|preview-?modal--mini|hover-?card/i.test(String(d.className)) && d.getAttribute('aria-modal') !== 'true'; }
   // The page's pointer off the page, so nothing shows as hovered (only where hover pops things up: Netflix).
   function parkPointer() {
-    if (!NETFLIX || document.fullscreenElement || typeof window.tvnavClick !== 'function') return;
+    // (Every site, not only Netflix: Prime Video's cards open a big preview under a resting pointer, which then
+    // covered the next row, and YouTube plays its thumbnails.)
+    if (document.fullscreenElement || nativePlayer() || typeof window.tvnavClick !== 'function') return;
     ignoreMouseUntil = performance.now() + 500;
     window.tvnavClick(JSON.stringify({ x: -40, y: -40, move: true }));
   }
@@ -337,6 +340,29 @@
   function boxShows(n, cs) {
     if (cs.backgroundImage !== 'none' || !CLEAR.test(cs.backgroundColor)) return true;
     return parseFloat(cs.borderTopWidth) > 0 && cs.borderTopStyle !== 'none' && !CLEAR.test(cs.borderTopColor);
+  }
+  // A play button that only fades in under the pointer, laid over a picture (Prime Video's episodes): the picture
+  // is what you press, so it is a stop even while the button is see-through.
+  function hoverOverPicture(el, b) {
+    if (b.width < 120 || b.height < 80 || !el.checkVisibility({ visibilityProperty: true })) return false;
+    for (let p = el.parentElement, i = 0; p && i < 3; p = p.parentElement, i++) {
+      for (const im of p.querySelectorAll('img, picture')) {
+        const r = im.getBoundingClientRect();
+        const w = Math.min(r.right, b.right) - Math.max(r.left, b.left), h = Math.min(r.bottom, b.bottom) - Math.max(r.top, b.top);
+        if (w > 0 && h > 0 && w * h >= b.width * b.height * 0.6) return true;
+      }
+    }
+    return false;
+  }
+  // A filled or outlined box (itself, or a child covering most of it): a button, not a line of text.
+  function drawnAsButton(el) {
+    if (boxShows(el, getComputedStyle(el))) return true;
+    for (const pseudo of ['::before', '::after']) {             // (Prime Video draws its button box this way)
+      const ps = getComputedStyle(el, pseudo);
+      if (ps.content && ps.content !== 'none' && boxShows(el, ps)) return true;
+    }
+    const w = el.getBoundingClientRect().width;
+    return [...el.children].some(ch => ch.getBoundingClientRect().width >= w * 0.8 && boxShows(ch, getComputedStyle(ch)));
   }
   // A see-through click area laid exactly over something that shows (Spotify's library rows): that thing.
   function clickLayer(el, b) {
@@ -521,7 +547,9 @@
     }
     if (best) {
       stuck = 0;
-      if (!vertical || anchorX === null || !fromEl) { const b = best.b; anchorX = (b.left + b.right) / 2; }
+      // (a wide item, such as a full-width strip, sets the column near its left edge, where a TV page lines up:
+      // its middle made Down drift to the right on Prime Video's title pages)
+      if (!vertical || anchorX === null || !fromEl) { const b = best.b; anchorX = b.width > innerWidth * 0.4 ? b.left + 100 : (b.left + b.right) / 2; }
       select(best.el);
       return;
     }
@@ -532,7 +560,8 @@
     if (pop && !(NETFLIX && /detail-modal/.test(String(pop.className))) && ++stuck >= 2) { stuck = 0; letGo.add(pop); note('let go of pop-up ' + describe(pop)); move(dir); return; }
     note('nothing ' + dir + ' of ' + (fromEl ? describe(fromEl) : 'start') + ', ' + list.length + ' that way' + (pop ? ', in pop-up ' + describe(pop) : ''));
     // Nothing further that way: scroll the page instead (Up/Down), so more appears. (Not behind a pop-up.)
-    if (vertical && !openPopup() && !(fromEl && pinned(fromEl))) scrollBy({ top: (dir === 'down' ? 1 : -1) * innerHeight * 0.6, behavior: 'smooth' });
+    // (Up on the top bar still scrolls the page back up; a side menu's ends leave the page where it is.)
+    if (vertical && !openPopup() && !(fromEl && sideBar(fromEl))) scrollBy({ top: (dir === 'down' ? 1 : -1) * innerHeight * 0.6, behavior: 'smooth' });
   }
 
   // Left/Right stay in the row: only things level with the current one (overlapping it vertically, or close).
@@ -558,7 +587,9 @@
     // Small text links between rows ("See more", row titles, "Join") are stepped over when something bigger
     // follows within a screen, so Down goes row of cards to row of cards. Buttons (chips, tabs) never are.
     const area = from.width * from.height;
-    const small = c => c.el.tagName === 'A' && c.b.width * c.b.height < Math.max(area * 0.15, innerWidth * innerHeight * 0.01);
+    // (plain text links only: a link drawn as a button, such as Prime Video's "Watch now", is a stop)
+    const small = c => c.el.tagName === 'A' && c.b.width * c.b.height < Math.max(area * 0.15, innerWidth * innerHeight * 0.01) &&
+      !drawnAsButton(c.el);
     // Only small links that lie before the next row of bigger things are stepped over; small links in that same
     // row (a menu bar's text tabs next to its icon buttons) stay.
     // Not when OK on the highlighted thing just opened something (a profile menu): then what appeared comes
@@ -592,7 +623,9 @@
     // (From a wide item, such as an episode in a list, anything above or below it within its width is in line: Up
     // from Netflix's first episode reaches the season picker at the right.)
     const wide = fromEl && from.width > innerWidth * 0.4;
-    const off = b => wide && Math.min(from.right, b.right) - Math.max(from.left, b.left) > 0 ? 0
+    // (Also anything lying mostly under/over the current item: Prime Video's "Watch now" under the film's title.)
+    const shared = b => Math.min(from.right, b.right) - Math.max(from.left, b.left);
+    const off = b => (wide && shared(b) > 0) || (fromEl && shared(b) >= b.width * 0.5) ? 0
       : ax0 < b.left ? b.left - ax0 : ax0 > b.right ? ax0 - b.right : 0;
     // Straight down/up the column first (a side bar next to the content is its own column); then close to it.
     // Nothing straight below: the nearest thing, counting sideways distance at half (a form in the middle of
@@ -786,6 +819,10 @@
     // (Gone on a later look: that is leaving the page (Back), not a menu OK opened. Nor is OK that opened another
     // page, such as a video: picking something there put a highlight on YouTube's channel mark over the video.)
     if (tries > 0 || (beforeOk.href && beforeOk.href !== location.href)) return;
+    // Nor is OK on something to play (an episode): its player covering the page is not a menu. (On Prime Video
+    // the highlight landed on the player's "Skip Recap", so Right/Left moved between buttons instead of skipping,
+    // and OK pressed "Next Episode".)
+    if (okWasPlay() || bigPlayingVideo()) return;
     const from = lastBox || { left: 0, top: 0, right: 0, bottom: 0 };
     const fx = (from.left + from.right) / 2, fy = (from.top + from.bottom) / 2;
     let best = null, dist = Infinity;
@@ -990,6 +1027,9 @@
         const r = rows.find(r => Math.abs(r[0].b.bottom - c.b.bottom) < 24);
         if (r) r.push(c); else rows.push([c]);
       }
+      // (no such row yet: the controls are still fading in, look again; Prime Video's lone "In scene" button was
+      // taken for the control bar)
+      if (!rows.some(r => r.length >= 3) && tries < 4) { controlsFromBottom(tries + 1); return; }
       const row = (rows.find(r => r.length >= 3) || rows[0]).sort((a, b) => a.b.left - b.b.left);
       anchorX = null;
       select(row[0].el);
