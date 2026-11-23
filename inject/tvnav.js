@@ -43,6 +43,7 @@
   /* The highlighted thing was replaced by a copy (Netflix rebuilds a row's cards when it pages): carry on from the
      copy, the same link nearest to where it was. */
   function relocate() {
+    if (restoreOpener()) return;
     if (!current || current.isConnected || !current.getAttribute) return;
     const href = current.getAttribute('href'), label = current.getAttribute('aria-label');
     if (!href && !label) return;
@@ -50,14 +51,47 @@
     const row = rowKey(current);
     const scope = row && row.isConnected ? row : document;
     let best = null, dist = Infinity;
+    const key = href && current.tagName === 'A' && current.href ? linkKey(current) : null;
     for (const c of scope.querySelectorAll(href ? 'a[href]' : '[aria-label]')) {
-      if (href ? c.getAttribute('href') !== href : c.getAttribute('aria-label') !== label) continue;
+      if (href ? (key ? linkKey(c) !== key : c.getAttribute('href') !== href) : c.getAttribute('aria-label') !== label) continue;
       const b = c.getBoundingClientRect();
       if (b.width < 2) continue;
       const d = lastBox ? Math.abs(b.left - lastBox.left) + 10 * Math.abs(b.top - lastBox.top) : 0;
       if (d < dist) { dist = d; best = c; }
     }
     if (best) { current = best; lastBox = best.getBoundingClientRect(); try { best.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+  }
+  /* A pop-up OK opened (Netflix's title panel) has closed (Back, its X): the highlight goes back onto the card
+     that opened it, as on a TV, instead of being lost (then the next arrow started from the top of the page). */
+  let opener = null;            // { key, label, box, pop }
+  function restoreOpener() {
+    if (!opener) return false;
+    const p = opener.pop;
+    const open = p.isConnected && p.getBoundingClientRect().width > 120 && p.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+    if (open) return false;
+    // Back from an episode started in the panel: the panel is drawn anew, still for that card.
+    const again = !document.fullscreenElement && openPopup();
+    if (again) { opener.pop = again; return false; }
+    if (nativePlayer()) return false;                  // watching it: the panel comes back after
+    const o = opener;
+    opener = null;
+    if (DEBUG) console.log('[tvnav] restoreOpener', o.key, o.label, current && current.isConnected);
+    if (current && current.isConnected && !p.contains(current) && current.getBoundingClientRect().width > 1) return false;   // moved on already
+    // The same element, if the site kept it (Netflix's "More Info" on the banner); else a copy of it.
+    let best = o.el.isConnected && o.el.getBoundingClientRect().width > 1 ? o.el : null, dist = best ? -1 : Infinity;
+    // (by where the link leads: Netflix changes the tracking part of a card's link each time it redraws a row)
+    if (!best && (o.key || o.label)) for (const c of document.querySelectorAll(o.key ? 'a[href]' : '[aria-label]')) {
+      if (o.key ? linkKey(c) !== o.key : c.getAttribute('aria-label') !== o.label) continue;
+      const b = c.getBoundingClientRect();
+      if (b.width < 2) continue;
+      const d = Math.abs(b.left - o.box.left) + 10 * Math.abs(b.top - o.box.top);
+      if (d < dist) { dist = d; best = c; }
+    }
+    // Not drawn yet (between the player closing and the panel coming back): keep looking for a few seconds.
+    if (!best) { if ((o.misses = (o.misses || 0) + 1) < 25) opener = o; return false; }
+    current = best; lastBox = best.getBoundingClientRect();
+    if (usingKeys) { try { best.focus({ preventScroll: true }); } catch (e) { /* ignore */ } }
+    return true;
   }
   function drawRing() {
     relocate();
@@ -107,9 +141,15 @@
       // (aria-hidden is not a reason to skip: sites hide duplicate links such as video thumbnails from screen
       // readers, and those are exactly what a TV remote should land on.)
       if (el.disabled) continue;
+      // Screen-reader shortcuts ("Skip navigation" on YouTube, "Skip to content"): only show when focused, never stops.
+      if (/^skip (to |navigation|main|content)/i.test((el.getAttribute('aria-label') || el.textContent || '').trim())) continue;
       // Netflix's row arrows are not stops: Right at the end of the screen pages the row on by itself.
       if (NETFLIX && (/(^|\s)handle/.test(String(el.className)) || /^see (more|previous) titles/i.test(el.getAttribute('aria-label') || '') ||
           (el.tagName === 'DIV' && el.closest('.carousel-row, .lolomoRow') && !el.querySelector('img')))) continue;
+      // ...nor are the cast, genre and "more" text links in a title's panel (Netflix's TV app has none): Up from the
+      // episodes went to them instead of back to Play, and on from there out of the panel.
+      if (NETFLIX && el.tagName === 'A' && /^(\/browse\/(person|genre)\/|#about)/.test(el.getAttribute('href') || '') &&
+          el.closest('.previewModal--container, [role=dialog]')) continue;
       const b = el.getBoundingClientRect();
       if (b.width < 12 || b.height < 12) continue;
       // Whole rows or panels made focusable (Spotify does this) are containers, not things to press.
@@ -432,6 +472,8 @@
     // box), carry on from where it was.
     let from = fromEl ? fromEl.getBoundingClientRect() : startBox(dir);
     if (fromEl && (from.width < 2 || from.height < 2) && lastBox) from = lastBox;
+    // The highlighted thing went away (the site rebuilt that part): carry on from where it was, if that is on screen.
+    if (!fromEl && current && lastBox && lastBox.bottom > 0 && lastBox.top < innerHeight) from = lastBox;
     const vertical = dir === 'up' || dir === 'down';
     const list = [];
     for (const el of candidates()) {
@@ -460,6 +502,13 @@
       const rows = list.filter(c => !pinned(c.el));
       if (rows.length) pool = rows;
     }
+    // ...and from that menu bar (or a side menu) Up stays in it: not into the page scrolled away above it.
+    if (dir === 'up' && fromEl && pinned(fromEl)) pool = list.filter(c => pinned(c.el));
+    // No highlight yet: Down starts in the page's content (a film's Play button), past the menu bar at the top.
+    if (dir === 'down' && !fromEl && !current) {
+      const rows = list.filter(c => !pinned(c.el) && c.b.top >= 0 && c.b.top < innerHeight);
+      if (rows.length) pool = rows;
+    }
     let best = vertical ? pickInNextRow(from, pool, dir, fromEl) : pickBest(from, list, dir);
     // End of the visible part of a row: rather than stopping on the row's small arrow button, go on to the next
     // hidden card (select() then uses the arrow to bring it into view), like a TV app's rows.
@@ -479,18 +528,20 @@
     // Held in a pop-up with nowhere to go that way, twice in a row: let go of it (a side panel that the site marks
     // as a pop-up must not trap the highlight).
     const pop = !document.fullscreenElement && openPopup();
-    if (pop && ++stuck >= 2) { stuck = 0; letGo.add(pop); note('let go of pop-up ' + describe(pop)); move(dir); return; }
+    // (Netflix's title panel is a real one: the highlight stays in it until Back or its X closes it.)
+    if (pop && !(NETFLIX && /detail-modal/.test(String(pop.className))) && ++stuck >= 2) { stuck = 0; letGo.add(pop); note('let go of pop-up ' + describe(pop)); move(dir); return; }
     note('nothing ' + dir + ' of ' + (fromEl ? describe(fromEl) : 'start') + ', ' + list.length + ' that way' + (pop ? ', in pop-up ' + describe(pop) : ''));
     // Nothing further that way: scroll the page instead (Up/Down), so more appears. (Not behind a pop-up.)
-    if (vertical && !openPopup()) scrollBy({ top: (dir === 'down' ? 1 : -1) * innerHeight * 0.6, behavior: 'smooth' });
+    if (vertical && !openPopup() && !(fromEl && pinned(fromEl))) scrollBy({ top: (dir === 'down' ? 1 : -1) * innerHeight * 0.6, behavior: 'smooth' });
   }
 
   // Left/Right stay in the row: only things level with the current one (overlapping it vertically, or close).
   // At the end of a row nothing happens, as on a TV, instead of jumping diagonally into another row.
   function pickBest(from, list, dir) {
     const fcy = (from.top + from.bottom) / 2;
+    // (overlapping it, or nearly: a tall card's row does not reach up to the chip bar above it, as on YouTube)
     const level = c => Math.min(from.bottom, c.b.bottom) - Math.max(from.top, c.b.top) > 0 ||
-      Math.abs((c.b.top + c.b.bottom) / 2 - fcy) < Math.max(from.height, 40);
+      Math.abs((c.b.top + c.b.bottom) / 2 - fcy) < Math.max(Math.min(from.height, c.b.height), 40);
     let best = null, bestScore = Infinity;
     for (const c of list) {
       if (current && !level(c)) continue;
@@ -538,12 +589,17 @@
     // Keep to the column: things off to the side (a mute button in a corner, a carousel's edge arrow) only when
     // there is nothing in line.
     const ax0 = anchorX !== null && fromEl ? anchorX : (from.left + from.right) / 2;
-    const off = b => ax0 < b.left ? b.left - ax0 : ax0 > b.right ? ax0 - b.right : 0;
+    // (From a wide item, such as an episode in a list, anything above or below it within its width is in line: Up
+    // from Netflix's first episode reaches the season picker at the right.)
+    const wide = fromEl && from.width > innerWidth * 0.4;
+    const off = b => wide && Math.min(from.right, b.right) - Math.max(from.left, b.left) > 0 ? 0
+      : ax0 < b.left ? b.left - ax0 : ax0 > b.right ? ax0 - b.right : 0;
     // Straight down/up the column first (a side bar next to the content is its own column); then close to it.
     // Nothing straight below: the nearest thing, counting sideways distance at half (a form in the middle of
     // the page below a logo at the edge is nearer than the footer link under the logo).
     const straight = pool.filter(c => off(c.b) === 0 && gap(c.b) < innerHeight * 0.9);
     if (straight.length) pool = straight;
+    else if (fromEl && sideBar(fromEl)) return null;     // the end of a side menu: stay (not into a card beside it)
     else {
       let near = null, cost = Infinity;
       for (const c of pool) { const k = gap(c.b) + off(c.b) * 0.5; if (k < cost) { cost = k; near = c; } }
@@ -567,6 +623,17 @@
     return best;
   }
 
+  // In a menu fixed down the side of the screen (YouTube's guide)?
+  function sideBar(el) {
+    for (let p = el, i = 0; p && p !== document.body && i < 15; p = p.parentElement, i++) {
+      const pos = getComputedStyle(p).position;
+      if (pos === 'fixed' || pos === 'sticky') {
+        const b = p.getBoundingClientRect();
+        return b.height > innerHeight * 0.5 && b.width < innerWidth * 0.3;
+      }
+    }
+    return false;
+  }
   // In a bar fixed to the screen (a site's header)?
   function pinned(el) {
     for (let p = el, i = 0; p && p !== document.body && i < 15; p = p.parentElement, i++) {
@@ -614,7 +681,9 @@
     if (current !== el || tries > 6) return;
     const b = el.getBoundingClientRect(), v = visibleBox(el);
     if (v.width >= b.width * 0.9) { drawRing(); return; }
-    const right = b.left > (v.left + v.right) / 2 || v.width < 8 && b.left >= v.right;
+    // Which side it is cut off on (a card only a little past the edge has most of itself still showing, so its
+    // left edge says nothing: Netflix's fifth card was paged the wrong way).
+    const right = v.width < 8 ? b.left >= v.right - 1 : b.right - v.right > v.left - b.left;
     const words = right ? /next|right|forward|more|scroll right|weiter/i : /prev|left|back|scroll left/i;
     let row = el.parentElement;
     for (let i = 0; row && i < 8; row = row.parentElement, i++) {
@@ -670,6 +739,7 @@
     // (a copy of el counts: Netflix rebuilds the cards behind the panel it opens)
     const same = x => x === el || (x && x.getAttribute && el.getAttribute('href') && x.getAttribute('href') === el.getAttribute('href'));
     relocate();
+    if (DEBUG) console.log('[tvnav] followAfterOk', tries, same(current), !!beforeOk && same(beforeOk.el), !!openPopup());
     if (!same(current) || !beforeOk || !same(beforeOk.el)) return;
     el = current;
     // OK opened a pop-up (Netflix's film panel): into it, on its Play / Resume button if it has one.
@@ -677,14 +747,45 @@
     if (pop && !pop.contains(el)) {
       const inPop = candidates().filter(c => pop.contains(c));
       const name = c => ((c.getAttribute('aria-label') || '') + ' ' + c.textContent).trim();
-      const play = inPop.find(c => /^(play|resume|watch)\b/i.test(name(c)));
-      if (!play && tries < 4) { setTimeout(() => followAfterOk(el, tries + 1), 350); return; }   // still sliding in
+      // (Netflix's main button says "Next Episode" once an episode is finished)
+      const play = inPop.find(c => /^(play|resume|watch|next episode|continue|start|restart)\b/i.test(name(c)));
+      if (!play && tries < 9) { setTimeout(() => followAfterOk(el, tries + 1), 350); return; }   // still sliding in
       const pick = play ||
         inPop.slice().sort((a, b) => a.getBoundingClientRect().top - b.getBoundingClientRect().top)[0];
-      if (pick) { beforeOk = { el: pick, seen: beforeOk.seen, href: location.href }; anchorX = null; select(pick); return; }
+      if (pick) {
+        {
+          opener = { el, key: el.tagName === 'A' && el.href ? linkKey(el) : null, label: el.getAttribute('aria-label'), box: lastBox || el.getBoundingClientRect(), pop };
+        }
+        beforeOk = { el: pick, seen: beforeOk.seen, href: location.href }; anchorX = null; select(pick); return;
+      }
     }
     const b = el.isConnected ? el.getBoundingClientRect() : null;
-    if (b && b.width > 1 && b.height > 1 && el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) return;
+    if (b && b.width > 1 && b.height > 1 && el.checkVisibility({ opacityProperty: true, visibilityProperty: true })) {
+      // OK opened a menu next to it (YouTube's settings gear): onto its first item, as a TV does. The item the site
+      // itself focused if it did, else the new menu item nearest to what was pressed.
+      if (tries === 0 || tries === 1) {
+        const now = candidates().filter(c => !beforeOk.seen.has(c) && c !== el && !el.contains(c));
+        const menuItem = c => /^(menuitem|menuitemradio|menuitemcheckbox|option)$/.test(c.getAttribute('role') || '') ||
+          !!c.closest('[role="menu"], [role="listbox"]');
+        const a = document.activeElement;
+        let pick = a && now.includes(a) ? a : null;
+        if (!pick) {
+          let dist = Infinity;
+          for (const c of now.filter(menuItem)) {
+            const r = c.getBoundingClientRect();
+            const d = Math.hypot((r.left + r.right) / 2 - (b.left + b.right) / 2, (r.top + r.bottom) / 2 - (b.top + b.bottom) / 2);
+            if (d < dist) { dist = d; pick = c; }
+          }
+        }
+        if (pick) { beforeOk = { el: pick, seen: beforeOk.seen, href: location.href }; anchorX = null; select(pick); return; }
+      }
+      // Still there: a pop-up may yet open (Netflix's title panel can take a second or two), so look again.
+      if (tries < 6 && !document.fullscreenElement) setTimeout(() => followAfterOk(el, tries + 1), 350);
+      return;
+    }
+    // (Gone on a later look: that is leaving the page (Back), not a menu OK opened. Nor is OK that opened another
+    // page, such as a video: picking something there put a highlight on YouTube's channel mark over the video.)
+    if (tries > 0 || (beforeOk.href && beforeOk.href !== location.href)) return;
     const from = lastBox || { left: 0, top: 0, right: 0, bottom: 0 };
     const fx = (from.left + from.right) / 2, fy = (from.top + from.bottom) / 2;
     let best = null, dist = Infinity;
@@ -698,7 +799,7 @@
       if (d < dist) { dist = d; best = c; }
     }
     if (best) { beforeOk = { el: best, seen: beforeOk.seen }; select(best); }
-    else if (document.fullscreenElement) hideControls();
+    else if (playerShowing()) hideControls();
   }
 
   function press(el) {
@@ -794,8 +895,13 @@
   }
   // The player's own close button ("Close player", "Close/Back"), if it has one.
   function closePlayerButton(scope) {
-    return [...(scope || document).querySelectorAll('button, [role=button]')].find(b =>
-      /^(close( player| video)?|close\/back|exit( player)?)$/i.test((b.getAttribute('aria-label') || b.title || '').trim())) || null;
+    // (only one that is showing: YouTube keeps hidden "Close" buttons for its own panels, and pressing one of those
+    // instead of going back left the video on screen)
+    return [...(scope || document).querySelectorAll('button, [role=button]')].find(b => {
+      if (!/^(close( player| video)?|close\/back|exit( player)?)$/i.test((b.getAttribute('aria-label') || b.title || '').trim())) return false;
+      const r = b.getBoundingClientRect();
+      return r.width >= 8 && r.height >= 8 && b.checkVisibility({ opacityProperty: true, visibilityProperty: true });
+    }) || null;
   }
   // The player's own "skip back / forward 10 seconds" button, if it has one.
   function skipButton(dir) {
@@ -853,12 +959,14 @@
   // Players only show their controls for real pointer movement, so the companion moves the page's pointer a
   // little over the player (the real pointer stays where it is). Without it: a made-up movement.
   let jiggle = 0;
+  // The player filling the screen: full screen, or Netflix's player page (a page of its own that is the player).
+  const playerShowing = () => document.fullscreenElement || (nativePlayer() ? document.body : null);
   function showControls() {
-    const fs = document.fullscreenElement;
+    const fs = playerShowing();
     if (!fs) return;
     // Onto the highlighted control (moving away from an open menu closes it on Twitch), else the middle.
     const onCtl = current && current.isConnected && fs.contains(current);
-    const b = (onCtl ? current : fullscreenPlayer()).getBoundingClientRect();
+    const b = (onCtl ? current : document.fullscreenElement ? fullscreenPlayer() : fs).getBoundingClientRect();
     const x = b.left + b.width / 2 + (jiggle = 1 - jiggle) * 2;
     const y = onCtl ? b.top + b.height / 2 : b.top + Math.min(b.height, innerHeight) * 0.55;
     ignoreMouseUntil = performance.now() + 800;
@@ -866,7 +974,7 @@
     const opts = { bubbles: true, clientX: x, clientY: y, view: window };
     (document.elementFromPoint(x, y) || fs).dispatchEvent(new MouseEvent('mousemove', opts));
   }
-  setInterval(() => { if (usingKeys && document.fullscreenElement) showControls(); }, 1500);
+  setInterval(() => { if (usingKeys && playerShowing()) showControls(); }, 1500);
   // Bottom control row, leftmost first (Play), once the controls have faded in.
   function controlsFromBottom(tries = 0) {
     showControls();
@@ -929,13 +1037,20 @@
         // (Prime Video only adds its controls while they show: bring them up and look again.)
         const byOk = fullscreenByOk;
         fullscreenByOk = false;
+        if (DEBUG) console.log('[tvnav] back in full screen, byOk', byOk, 'history', history.length);
         const leave = close => {
           if (close) {
             realPress(close);
             setTimeout(() => { if (document.fullscreenElement) document.exitFullscreen().catch(() => {}); }, 900);
           } else {
-            document.exitFullscreen().catch(() => {});
-            if (byOk && history.length > 1) history.back();
+            // (back only once full screen has really ended: YouTube ignored a Back sent at the same moment)
+            const back = () => { if (DEBUG) console.log('[tvnav] back after full screen', location.href); if (byOk && history.length > 1) history.back(); };
+            // (on the change itself, or after a moment: Edge's exitFullscreen() promise did not always settle)
+            let gone = false;
+            const after = () => { if (!gone) { gone = true; setTimeout(back, 150); } };
+            document.addEventListener('fullscreenchange', after, { once: true });
+            setTimeout(after, 800);
+            document.exitFullscreen().catch(after);
           }
         };
         const close = closePlayerButton(document.fullscreenElement);
@@ -943,6 +1058,8 @@
         else { showControls(); setTimeout(() => leave(document.fullscreenElement && closePlayerButton(document.fullscreenElement)), 450); }
         return;
       }
+      // Netflix's player page: on the controls, Back hides them (back to watching); watching, it leaves.
+      if (nativePlayer() && usingKeys) { hideControls(); return; }
       const close = bigPlayingVideo() && closePlayerButton(document);
       if (close) { realPress(close); return; }
       if (history.length > 1) history.back();
@@ -952,6 +1069,8 @@
     if (dir) {
       if (typing && (dir === 'left' || dir === 'right')) return;     // move the caret
       if (nativePlayer() && !usingKeys && (dir === 'left' || dir === 'right')) return;   // Netflix seeks itself
+      // YouTube Shorts: Up/Down are the previous / next Short (YouTube's own keys), while watching.
+      if (!usingKeys && (dir === 'up' || dir === 'down') &&/(^|\.)youtube\.com$/.test(location.hostname) && location.pathname.startsWith('/shorts/')) return;
       const watching = !usingKeys && (bigPlayingVideo() || (document.fullscreenElement && bigVideo()));
       // Players that do not say how long the video is (Prime Video) but have their own skip buttons: press those.
       const skip = watching && (dir === 'left' || dir === 'right') && !isFinite(watching.duration) && skipButton(dir);
@@ -963,7 +1082,7 @@
         watching.currentTime = Math.max(0, watching.currentTime + (dir === 'right' ? SEEK_SECONDS : -SEEK_SECONDS));
         return;
       }
-      if (document.fullscreenElement && !usingKeys) {
+      if (playerShowing() && !usingKeys) {
         unscrollPlayer();
         // Full screen: Up/Down (or Left/Right on a live stream) bring up the player's controls.
         e.preventDefault(); e.stopPropagation();
