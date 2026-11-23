@@ -141,6 +141,12 @@
       // (aria-hidden is not a reason to skip: sites hide duplicate links such as video thumbnails from screen
       // readers, and those are exactly what a TV remote should land on.)
       if (el.disabled) continue;
+      // Spotify's play buttons that sit on each card and shortcut (shown under the pointer): the card is the stop,
+      // or Right took two presses per card. The big one on a playlist's page stays.
+      if (ROW_STOPS && el.getAttribute('data-testid') === 'play-button' &&
+          !el.closest('[data-testid="action-bar-row"], [data-testid="action-bar"]')) continue;
+      // Twitch's tag chips under each stream ("Tag, FPS"): a row took a press per tag.
+      if (/^Tag, /.test(el.getAttribute('aria-label') || '')) continue;
       // Screen-reader shortcuts ("Skip navigation" on YouTube, "Skip to content"): only show when focused, never stops.
       if (/^skip (to |navigation|main|content)/i.test((el.getAttribute('aria-label') || el.textContent || '').trim())) continue;
       // Netflix's row arrows are not stops: Right at the end of the screen pages the row on by itself.
@@ -240,7 +246,7 @@
 
   const letGo = new WeakSet();      // pop-ups the highlight was stuck in and left
   let stuck = 0;
-  // What happened, for tvnav-host.log (so a page that misbehaves on the TV can be fixed without seeing it).
+  // What happened, for tvnav-window.tvnavLog (so a page that misbehaves on the TV can be fixed without seeing it).
   let notes = 0, lastNote = 0;
   function describe(el) {
     const b = el.getBoundingClientRect();
@@ -528,6 +534,15 @@
       const rows = list.filter(c => !pinned(c.el));
       if (rows.length) pool = rows;
     }
+    // In an area that scrolls up and down by itself (Spotify's middle part, its library list): Up/Down stay in it
+    // while it has more that way (Down from a card jumped into the "Now playing" panel beside it).
+    if (vertical && fromEl) {
+      const area = vScroller(fromEl);
+      if (area) {
+        const inside = pool.filter(c => area.contains(c.el));
+        if (inside.length) pool = inside;
+      }
+    }
     // ...and from that menu bar (or a side menu) Up stays in it: not into the page scrolled away above it.
     if (dir === 'up' && fromEl && pinned(fromEl)) pool = list.filter(c => pinned(c.el));
     // No highlight yet: Down starts in the page's content (a film's Play button), past the menu bar at the top.
@@ -536,6 +551,20 @@
       if (rows.length) pool = rows;
     }
     let best = vertical ? pickInNextRow(from, pool, dir, fromEl) : pickBest(from, list, dir);
+    // No highlight yet: Down starts on the page's main button (Play / Watch / Resume) when one is showing, as a TV
+    // app does on a film's page.
+    if (dir === 'down' && !fromEl && !current) {
+      // (the button's whole label: "Watch", "Play S2 E1", "Resume", not a banner saying "Watch, sub, score...")
+      // (in the page, not a player bar along the bottom: Spotify's)
+      // ("Play <playlist>" too, as Spotify's big play button says, but nothing with a comma: banners)
+      const mainLabel = c => {
+        const l = (c.el.getAttribute('aria-label') || c.el.textContent || '').replace(/\s+/g, ' ').trim();
+        return /^(play|watch|resume|watch now|continue watching)( s\d+ ?e\d+| episode \d+)?$/i.test(l) ||
+          (/^(play|resume) /i.test(l) && l.length <= 40 && !l.includes(',') && c.b.width >= 40 && c.b.height >= 40);
+      };
+      const main = pool.find(c => c.b.top >= 0 && c.b.bottom <= innerHeight * 0.85 && !pinned(c.el) && mainLabel(c));
+      if (main) best = main;
+    }
     // End of the visible part of a row: rather than stopping on the row's small arrow button, go on to the next
     // hidden card (select() then uses the arrow to bring it into view), like a TV app's rows.
     const isButton = best && (best.el.tagName === 'BUTTON' || best.el.getAttribute('role') === 'button');
@@ -630,7 +659,8 @@
     // Straight down/up the column first (a side bar next to the content is its own column); then close to it.
     // Nothing straight below: the nearest thing, counting sideways distance at half (a form in the middle of
     // the page below a logo at the edge is nearer than the footer link under the logo).
-    const straight = pool.filter(c => off(c.b) === 0 && gap(c.b) < innerHeight * 0.9);
+    // (no highlight yet: no column to keep to, just the nearest thing; DStv's Watch button was skipped)
+    const straight = fromEl ? pool.filter(c => off(c.b) === 0 && gap(c.b) < innerHeight * 0.9) : [];
     if (straight.length) pool = straight;
     else if (fromEl && sideBar(fromEl)) return null;     // the end of a side menu: stay (not into a card beside it)
     else {
@@ -656,6 +686,14 @@
     return best;
   }
 
+  // The nearest box around el that scrolls up and down by itself (not the page), if any.
+  function vScroller(el) {
+    for (let p = el.parentElement; p && p !== document.body && p !== document.documentElement; p = p.parentElement) {
+      const oy = getComputedStyle(p).overflowY;
+      if ((oy === 'auto' || oy === 'scroll') && p.scrollHeight > p.clientHeight + 4) return p;
+    }
+    return null;
+  }
   // In a menu fixed down the side of the screen (YouTube's guide)?
   function sideBar(el) {
     for (let p = el, i = 0; p && p !== document.body && i < 15; p = p.parentElement, i++) {
@@ -902,7 +940,7 @@
   }
   /* Full screen the way the site's own button does it (YouTube's and Twitch's players lay themselves out for it),
      else the player box itself. Browsers only allow full screen from a real key press or click, which a video
-     starting a moment after OK no longer counts as, so helper	vnav-host.ps1 runs it as a user action
+     starting a moment after OK no longer counts as, so helper\tvnav-host.ps1 runs it as a user action
      (window.tvnavGesture). */
   const FS_BUTTONS = '.ytp-fullscreen-button, [data-a-target="player-fullscreen-button"], ' +
     'button[aria-label*="full screen" i], button[aria-label*="fullscreen" i], button[title*="full screen" i], button[title*="fullscreen" i]';
@@ -1021,6 +1059,10 @@
         .filter(c => c.b.top > innerHeight * 0.6 && c.b.bottom <= innerHeight + 2);
       if (!bar.length && tries < 3) { controlsFromBottom(tries + 1); return; }
       if (!bar.length) { move('up'); return; }
+      // A "Skip Ad" / "Skip Intro" button showing: that first (DStv's advert has only it and "Visit advertiser's
+      // site", which the leftmost-first rule picked).
+      const skip = candidates().find(el => /^skip( ad| ads| intro| recap|$)/i.test((el.getAttribute('aria-label') || el.textContent || '').trim()));
+      if (skip) { anchorX = null; select(skip); return; }
       // The lowest row with several buttons (the control bar), not a lone button under it (DStv's "Channel Lineup").
       const rows = [];
       for (const c of bar.sort((x, y) => y.b.bottom - x.b.bottom)) {
@@ -1075,6 +1117,7 @@
         if (usingKeys) { hideControls(); return; }
         // A player drawn over the page (Prime Video, DStv) closes with its own button; others are a page of their own.
         // (Prime Video only adds its controls while they show: bring them up and look again.)
+        autoFsDoneFor = location.href;                  // left by you: stays out of full screen on this page
         const byOk = fullscreenByOk;
         fullscreenByOk = false;
         if (DEBUG) console.log('[tvnav] back in full screen, byOk', byOk, 'history', history.length);
@@ -1166,19 +1209,52 @@
   const seenStart = new WeakSet();
   document.addEventListener('play', e => { if (e.target instanceof HTMLVideoElement) videoStarted(e.target); }, true);
   // (Netflix starts its video before adding it to the page, so that start never reaches this page: look too.)
+  // (and again after the page changed: YouTube moves the home page's little preview player onto the video's page,
+  // playing on, so that start was only ever seen as a preview and the video never went full screen)
+  let lastHref = location.href;
   setInterval(() => {
-    for (const v of document.querySelectorAll('video')) if (!v.paused && !seenStart.has(v)) videoStarted(v);
+    const moved = location.href !== lastHref;
+    lastHref = location.href;
+    if (moved) autoFsDoneFor = null;                   // a new page: opening it again goes full screen again
+    for (const v of document.querySelectorAll('video')) {
+      if (moved && !v.paused) seenStart.delete(v);
+      if (!v.paused && !seenStart.has(v)) videoStarted(v);
+    }
   }, 1000);
   document.addEventListener('pause', e => { if (e.target instanceof HTMLVideoElement) seenStart.delete(e.target); }, true);
+  function bannerTrailer(v) {
+    const r = v.getBoundingClientRect();
+    // (DStv's buttons are plain boxes with a hand pointer)
+    for (const b of document.querySelectorAll('a[href], button, [role=button], div, span')) {
+      if ((b.textContent || '').length > 40) continue;
+      const label = (b.getAttribute('aria-label') || b.textContent || '').replace(/\s+/g, ' ').trim();
+      if (!/^(watch( now| trailer)?|play|resume|more info|more details)$/i.test(label)) continue;
+      if (/^(DIV|SPAN)$/.test(b.tagName) && getComputedStyle(b).cursor !== 'pointer') continue;
+      const x = b.getBoundingClientRect();
+      if (x.width < 20 || x.left < r.left || x.right > r.right || x.top < r.top || x.bottom > r.bottom) continue;
+      if (!b.checkVisibility({ opacityProperty: true, visibilityProperty: true })) continue;
+      const hit = document.elementFromPoint(x.left + x.width / 2, x.top + x.height / 2);
+      if (hit && (hit === b || b.contains(hit))) return true;
+    }
+    return false;
+  }
   function videoStarted(v) {
     seenStart.add(v);
     if (NETFLIX && !nativePlayer()) return;          // trailers in Netflix's panels are never "yours"
+    // A banner trailer: the video has its own "Watch" / "Play" button showing over it (DStv's home page after
+    // picking a profile went full screen with its trailer, hiding the rows).
+    if (!(document.fullscreenElement && document.fullscreenElement.contains(v)) && bannerTrailer(v)) return;
     // A muted trailer starting on the page OK opened (Prime Video's title pages) is not one you started; one you
     // pressed Play for is (it starts with sound).
     if (v.muted && okRecently() && !okWasPlay() && !(document.fullscreenElement && document.fullscreenElement.contains(v))) return;
-    if (okRecently() || (document.fullscreenElement && document.fullscreenElement.contains(v))) userVideos.add(v);
-    if (userVideos.has(v)) startedBig(v, okRecently(), 0);
+    // Also yours: a video on a player page (an address ending in /play, /watch or /player: DStv's programme
+    // starts after an advert, long after OK), and the next video on the page where one of yours just played.
+    const playerPage = /\/(play|watch|player)(\/|$|\?)/i.test(location.pathname + location.hash);
+    const afterYours = lastYours && lastYours.href === location.href && Date.now() - lastYours.t < 180000;
+    if (okRecently() || playerPage || afterYours || (document.fullscreenElement && document.fullscreenElement.contains(v))) userVideos.add(v);
+    if (userVideos.has(v)) { lastYours = { href: location.href, t: Date.now() }; startedBig(v, okRecently() || playerPage || afterYours, 0); }
   }
+  let lastYours = null;
   /* ---------- Continue Watching (the home screen's row) ----------
      While a video you started plays, what it is and where you are go to window.tvnavWatched every 30 s (and when
      it pauses or ends); tvnav-host.ps1 keeps the latest one per app. Near the end it is marked done (removed). */
@@ -1238,13 +1314,15 @@
   function startedBig(v, byOk, tries) {
     if (v.paused) return;
     if (share(v) <= BIG) { if (tries < 12) setTimeout(() => startedBig(v, byOk, tries + 1), 500); return; }
+    // (a banner trailer's own Watch button can appear a moment after it starts: look once more first)
+    if (tries >= 0) { setTimeout(() => startedBig(v, byOk, -1), 600); return; }
+    if (!(document.fullscreenElement && document.fullscreenElement.contains(v)) && bannerTrailer(v)) { userVideos.delete(v); return; }
     {
       usingKeys = false; drawRing();
       followWatching(v);
-      // Opened with OK: straight to full screen, as a TV app plays a video (once per page, so leaving full
-      // screen yourself sticks).
+      // Opened with OK: straight to full screen, as a TV app plays a video (not again on a page where you left
+      // full screen yourself; an advert's full screen ending when the programme starts does not count: DStv).
       if (byOk && !document.fullscreenElement && autoFsDoneFor !== location.href) {
-        autoFsDoneFor = location.href;
         fullscreenByOk = true;
         setTimeout(() => { if (!v.paused) goFullscreen(v); }, 400);
       }
