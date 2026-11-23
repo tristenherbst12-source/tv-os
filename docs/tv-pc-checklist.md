@@ -67,6 +67,14 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       and OK plays it.
 - [ ] Spotify: keeps playing after Home; the home screen shows the song (moving bars while playing, grey when
       paused); opening the tile again brings the same window back.
+- [ ] Netflix: OK on a card puts the highlight on Play/Resume in its panel; Back puts it back on the card; Up from
+      the first episode reaches the season picker; in the player, Down shows the controls and Back hides them.
+- [ ] YouTube: OK on a video goes full screen (also the second time); the gear's menu can be used; Back leaves the
+      video for the list; on a Short, Down is the next Short.
+- [ ] Prime Video: Watch now under the banner can be reached; episodes on a series page can be reached; while
+      watching, Right/Left skip 10 s (the highlight never lands on Skip Recap / Next Episode by itself).
+- [ ] DStv: picking a profile does not start the home trailer full screen; a catch-up episode goes full screen
+      after its advert, and Right/Left skip 10 s.
 - [ ] Logins still there after a restart.
 
 ## Continue Watching

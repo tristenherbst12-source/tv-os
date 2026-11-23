@@ -27,7 +27,7 @@
     "back: a tap goes to the app (the TV windows turn it into 'back'); holding it 0.8 s goes home.",
     "block: swallowed, so Windows does not act on them (the remote's search button opens a Bing search otherwise).",
     "Remote tested 11 Nov 2026 (touchpad remote): arrows, OK = Enter, Back = Backspace, Home = Browser_Home, Search = Browser_Search; media keys are left to the apps.",
-    "volumeUp/volumeDown/mute: handled by tv.ahk on the TV (2% steps, with a volume bar). Windows does this in Explorer, which the TV does not run.",
+    "volumeUp/volumeDown/mute: handled by tv.ahk on the TV (1% steps, with a volume bar). Windows does this in Explorer, which the TV does not run.",
     "standby: the remote's power/sleep key (when it sends the keyboard Sleep key) goes to standby. A power button that Windows handles itself turns the screen off instead (setup step 5).",
     "To check another remote: Settings > Remote Button Test."
   ]

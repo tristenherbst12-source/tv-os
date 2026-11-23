@@ -120,7 +120,11 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
   Twitch's own settings menu needs the touchpad for now; its other controls work with the remote.
 - **Spotify** keeps playing when you press Home (the other apps close), and the home screen shows the song that is
   playing. In Spotify, each song in a list is one stop: OK plays it.
-- **Netflix** handles its own player: Left/Right skip 10 s, OK pauses.
+- **Netflix** handles its own player: Left/Right skip 10 s, OK pauses, Up/Down show its controls. OK on a film or
+  series opens its panel with the highlight on Play; Up from the episodes reaches the season picker; Back closes
+  the panel and the highlight goes back to the card you opened.
+- On a page with no highlight yet, the first Down goes to the page's Play / Watch / Resume button.
+- Adverts before a programme (DStv): Down goes to "Skip Ad" when it shows.
 - **Continue Watching:** a row on the home screen with the last video watched in each app (picture, title, time
   left). OK opens the app right there and carries on (YouTube at the same second; Netflix remembers its own place).
   Finished videos drop off; entries older than 3 weeks too.

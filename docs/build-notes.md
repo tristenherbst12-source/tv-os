@@ -431,3 +431,33 @@ once at 04:00-04:10 and the helper re-enters standby 45 s after the restart (`st
 Idle power of a Haswell i5 Tiny is roughly 8-12 W; staying on is fine for the SSD and electronics (low heat, no
 power cycling); clean the vents every few months. Tested here in test mode (requests, Power page); the real
 screen-off/mute/wake path and the 04:00 restart still need the TV PC.
+
+## Stage 6, round 8 (23 Nov 2026): full remote test of every app
+Every app was driven here with real key presses over the debugging port (scratch driver, windows the TV's size and
+scale, signed in: Netflix, YouTube, Prime Video, DStv, Twitch, Spotify; F1 TV signed out; Disney+ not tested, no
+account). Fixed in inject/tvnav.js:
+- Netflix: the fifth card paged its row the wrong way (direction from the card's left edge); OK on a card now waits
+  up to ~3 s for the title panel and goes onto Play/Resume/Next Episode; the panel keeps the highlight (no
+  cast/genre/"more" links, no let-go); Up from a wide item (an episode) reaches anything above within its width
+  (the season picker); Back/X restores the highlight onto the opening card (by link without tracking extras,
+  retried while the panel or page is redrawn, kept across watching from the panel); the player page counts as a
+  showing player (controls kept up, Back hides them first).
+- YouTube: "Skip navigation" is never a stop; Left/Right "level" no longer reaches up to the chip bar; the side menu
+  and top bar keep Up/Down in them (Up on the top bar still scrolls the page); Back from a full-screen video goes
+  back (hidden 0x0 "Close" buttons were pressed instead; and the back now waits for fullscreenchange); OK on the
+  gear goes into its menu (the site's focused item, else the nearest new menu item); Shorts get Up/Down; the home
+  preview player carried onto /watch is re-checked after an address change, so the video goes full screen.
+- Prime Video: links drawn as buttons are never stepped over; things lying mostly under the current item count as
+  in line; wide items set the column near their left edge; hover-only play buttons over a picture are stops; the
+  page pointer is parked off the page after keys on every site (a resting pointer opened previews over the next
+  row); the control bar is looked for again until it has faded in; OK on something playable never puts the
+  highlight on the player's buttons (Right then moved to Next Episode).
+- DStv: banner trailers (a Watch/Play button showing over the video) never count as yours; videos on player pages
+  (/play, /watch, /player) and the next video after one of yours count; auto full screen is only suppressed after
+  you left it yourself on that page; Down in a player picks Skip Ad/Intro/Recap first.
+- All: with no highlight, Down starts on the main Play/Watch/Resume button (whole short label, upper part of the
+  screen); otherwise the nearest thing, no column; Up/Down stay inside a self-scrolling area while it has more
+  (Spotify's middle part). Twitch tags and Spotify's per-card play buttons are not stops.
+Not fixed: F1 TV's cookie pop-up and DStv's adverts live in cross-site frames (separate processes) the page script
+cannot reach (touchpad once; Down during a DStv advert moves behind the player). Spotify: Up from the first song
+passes the pinned Play bar. Twitch home: the big featured stream is not a stop.
