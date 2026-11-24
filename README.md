@@ -138,8 +138,15 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
   Spotify is playing. Any button ends it. Settings > Screensaver changes the time or turns it off.
 - **Phone remote:** Settings > Phone Remote shows a QR code. Scan it with your phone's camera (same Wi-Fi as the
   TV): your phone becomes a remote with arrows, OK, Back, Home, play/pause, volume, and a box to **type** into the
-  TV (searches, sign-ins). Add the page to the phone's home screen to keep it. Any button also wakes the TV from
-  standby.
+  TV (searches, sign-ins). Any button also wakes the TV from standby.
+- **Phone remote as an app (Android, Chrome):** Chrome only installs apps from secure (https) addresses, and the TV
+  is plain http on your home network, so tell the phone's Chrome to trust the TV's address once:
+  1. In the router, give the TV PC a fixed address (a "DHCP reservation"), so the address never changes.
+  2. On the phone, open Chrome and type `chrome://flags/#unsafely-treat-insecure-origin-as-secure` in the address
+     bar. Set it to **Enabled** and type the TV's address in the box, e.g. `http://192.168.0.180:8766` (Settings >
+     Phone Remote shows it). Tap **Relaunch**.
+  3. Scan the QR code again, then Chrome's menu (3 dots) > **Install app**. The remote then opens like an app, in
+     its own window with its own icon.
 - **Settings** has the volume, sound output, sleep timer, screensaver, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
 - **Power** has Standby, Restart and Shut Down. **Standby** is how the TV PC "turns off": the screen goes off, the

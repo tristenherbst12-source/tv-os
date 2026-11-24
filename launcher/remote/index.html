@@ -8,7 +8,7 @@
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="icon" href="icon.svg">
-<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
 <title>TV Remote</title>
 <!-- The phone remote, served by the TV's helper on the home network (helper.ps1, "phone remote").
      Paired by the key in the QR code on the TV (Settings > Phone Remote): it arrives in the address after #, is
@@ -257,6 +257,9 @@
   }
   if (!key) showPairing();
   else { $('remote').hidden = false; poll(); }
+  // Installable as an app (Chrome wants a service worker; it only allows one on https, or on an address the phone's
+  // Chrome treats as secure: see the README, "Phone remote as an app").
+  if ('serviceWorker' in navigator && window.isSecureContext) navigator.serviceWorker.register('/sw.js').catch(() => {});
   // (the code scanned again while the page is open: take the new key)
   window.addEventListener('hashchange', () => {
     const n = /[#&]k=([\w-]+)/.exec(location.hash);

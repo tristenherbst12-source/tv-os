@@ -773,12 +773,22 @@ function Handle-Remote($ctx) {
     $req = $ctx.Request
     $path = $req.Url.AbsolutePath
     $method = $req.HttpMethod
-    # The page itself holds no secrets (the key stays in the phone).
+    # The page and what makes it an installable app; none of it holds secrets (the key stays in the phone).
     $files = @{ '/' = @('index.html', 'text/html; charset=utf-8'); '/index.html' = @('index.html', 'text/html; charset=utf-8')
-                '/manifest.webmanifest' = @('manifest.webmanifest', 'application/manifest+json'); '/icon.svg' = @('icon.svg', 'image/svg+xml') }
+                '/manifest.webmanifest' = @('manifest.webmanifest', 'application/manifest+json'); '/sw.js' = @('sw.js', 'text/javascript; charset=utf-8')
+                '/icon.svg' = @('icon.svg', 'image/svg+xml'); '/icon-maskable.svg' = @('icon-maskable.svg', 'image/svg+xml')
+                '/icon-192.png' = @('icon-192.png', 'image/png'); '/icon-512.png' = @('icon-512.png', 'image/png'); '/icon-maskable-512.png' = @('icon-maskable-512.png', 'image/png') }
     if ($method -eq 'GET' -and $files.ContainsKey($path)) {
         $f = $files[$path]
-        Send-Plain $ctx 200 ([IO.File]::ReadAllText((Join-Path $RemoteDir $f[0]), [Text.Encoding]::UTF8)) $f[1]; return
+        $res = $ctx.Response
+        $bytes = [IO.File]::ReadAllBytes((Join-Path $RemoteDir $f[0]))      # (as they are: the icons are pictures)
+        $res.StatusCode = 200
+        $res.ContentType = $f[1]
+        $res.AddHeader('Cache-Control', 'no-cache')
+        if ($path -eq '/sw.js') { $res.AddHeader('Service-Worker-Allowed', '/') }
+        $res.ContentLength64 = $bytes.Length
+        $res.OutputStream.Write($bytes, 0, $bytes.Length)
+        $res.Close(); return
     }
     if ($req.Headers['X-Remote-Key'] -ne $Helper.remoteKey) { Send-Response $ctx 401 @{ error = 'not paired' }; return }
     if ($method -eq 'GET' -and $path -eq '/api/status') {

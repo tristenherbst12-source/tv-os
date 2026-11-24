@@ -510,3 +510,10 @@ passes the pinned Play bar. Twitch home: the big featured stream is not a stop.
   `control-button-playpause` / `-skip-forward` / `-skip-back` (Runtime.evaluate, userGesture). Otherwise AHK sends
   the key on to the app in front. The phone remote's media buttons take the same path. Tested here: play, pause,
   next (the song changed), previous; another TV window in front leaves Spotify alone.
+- **Phone remote as an installable app (24 Nov):** Chrome on Android only offered a shortcut ("This app can't be
+  installed"): installing needs a secure context, and http://<TV>:8766 is not one. Chosen: the phone's Chrome flag
+  "Insecure origins treated as secure" for the TV's address (README). For a clean install the remote now has PNG
+  icons (192, 512, maskable 512; rendered from icon.svg / icon-maskable.svg with headless Edge), a manifest with
+  id/scope, and sw.js (network first, keeps the page for when the TV is off; /api/ always live), registered only in
+  a secure context. The helper serves the remote's files as bytes now (the PNGs). Checked over CDP on
+  http://localhost:8766 (secure like the flagged address): no manifest or installability errors, worker active.
