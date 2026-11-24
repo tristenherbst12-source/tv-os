@@ -50,6 +50,11 @@ $ws = New-Object System.Net.WebSockets.ClientWebSocket
 $ws.Options.KeepAliveInterval = [TimeSpan]::FromSeconds(20)
 $ws.ConnectAsync([Uri]$wsUrl, [Threading.CancellationToken]::None).Wait()
 Log "connected on port $Port"
+# Which debugging port this window has, for the helper (it presses Spotify's own buttons for the media keys).
+$PortsDir = Join-Path $TV.Data 'ports'
+if (-not (Test-Path $PortsDir)) { New-Item -ItemType Directory -Force $PortsDir | Out-Null }
+$PortFile = Join-Path $PortsDir "$Name.txt"
+try { [IO.File]::WriteAllText($PortFile, [string]$Port) } catch { }
 
 $script:NextId = 0
 function Send-Cdp([string]$Method, $Params = @{}, [string]$Session = $null) {
@@ -164,4 +169,5 @@ try {
 } catch {
     Log "stopped: $($_.Exception.InnerException.Message) $($_.Exception.Message)"
 }
+Remove-Item $PortFile -ErrorAction SilentlyContinue
 Log 'window closed'

@@ -3,6 +3,7 @@
 ; - Back (remote):    a short press goes to the app as normal; holding it for 0.8 s also goes Home.
 ; - Blocked keys:     e.g. the remote's Search button, which would otherwise open a web search.
 ; - Pointer:          hidden while the remote's buttons are used (not with -Windowed).
+; - Media keys:       play/pause, next, previous go to Spotify from the home screen and Spotify (see MediaKey).
 ; - Volume keys:      change the volume, with a small volume bar (not with -Windowed). Windows normally does this
 ;                     in Explorer, which does not run on the TV, so without this the volume buttons do nothing.
 ; - Escape hatch:     Ctrl+Alt+Shift+D by default: start the Windows desktop (asks for the PIN when one is set).
@@ -474,6 +475,17 @@ for k in JsonArray(km, "global", "block")
 ; used: the remote cannot wake this PC from it.
 for k in JsonArray(km, "global", "standby")
     try Hotkey("$" k, (*) => HelperCall("POST", "/power/standby", "", true))
+; The media keys (play/pause, next, previous): Spotify, when it is open and the home screen, the screensaver or
+; Spotify is in front (the helper presses Spotify's own button; without Windows' desktop the keys reached no
+; player). Otherwise, or without the helper, the key goes on to the app in front as usual.
+MediaKey(action, key, *) {
+    r := HelperCall("POST", "/media/" action)
+    if !RegExMatch(r, '"handled"\s*:\s*true')
+        Send("{" key "}")
+}
+Hotkey("$Media_Play_Pause", MediaKey.Bind("playpause", "Media_Play_Pause"))
+Hotkey("$Media_Next", MediaKey.Bind("next", "Media_Next"))
+Hotkey("$Media_Prev", MediaKey.Bind("prev", "Media_Prev"))
 HotIf(BackApplies)
 for k in JsonArray(km, "global", "back")
     try Hotkey("$" k, BackDown)

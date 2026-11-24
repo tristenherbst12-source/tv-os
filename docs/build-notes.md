@@ -501,3 +501,12 @@ passes the pinned Play bar. Twitch home: the big featured stream is not a stop.
   .NET strong crypto, clock, PowerShell vs curl.exe, the remote's listener, URL reservation, firewall rule and
   profiles, and a request to the remote from the PC itself, to net-report.txt. Unreachable from the phone with all
   of that fine = the router isolates Wi-Fi clients.
+- **Media keys did nothing on the TV (24 Nov):** play/pause, next and previous (remote and phone) reached no player
+  on the home screen, the screensaver or even in Spotify. Without Explorer nothing routes the media keys to the
+  media session, and with several Edge processes open the keys were not Spotify's. Now tv.ahk catches
+  Media_Play_Pause/Next/Prev and asks the helper (`POST /media/{playpause|next|prev}`): when Spotify's window is
+  open and the launcher, Spotify or nothing is in front (or standby), the helper connects to the Spotify window's
+  debugging port (each tvnav-host writes its port to data\ports\<name>.txt) and clicks Spotify's own
+  `control-button-playpause` / `-skip-forward` / `-skip-back` (Runtime.evaluate, userGesture). Otherwise AHK sends
+  the key on to the app in front. The phone remote's media buttons take the same path. Tested here: play, pause,
+  next (the song changed), previous; another TV window in front leaves Spotify alone.

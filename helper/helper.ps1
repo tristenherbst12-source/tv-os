@@ -27,6 +27,7 @@
 #   GET  /standby                   {standby, since}
 #   GET  /remote-info               the phone remote's address and pairing link (for the QR code)
 #   GET  /update                    {current, latest, available, message, error, hasToken, lastUpdate}
+#   POST /media/{playpause|next|prev}  tv.ahk's media keys: {handled} when Spotify's own button was pressed
 #   POST /update/check, POST /update/install, POST /update/seen (lastUpdate shown)
 # Phone remote (home network, port settings.remotePort, default 8766): GET / (the page); with header X-Remote-Key:
 #   GET /api/status, POST /api/key/{up|down|left|right|ok|back|home|playpause|next|prev|volup|voldown|mute},
@@ -641,6 +642,72 @@ function Get-UpdateState {
     return $s
 }
 
+# ---------- media keys -> Spotify ----------
+# The TV has no Windows desktop (Explorer), which is what normally sends the media keys to whatever plays; with
+# several Edge windows open they reached no player. So tv.ahk asks here first: when Spotify is open and the home
+# screen, the screensaver, standby or Spotify itself is in front, Spotify's own button is pressed in its page
+# (over the debugging port its companion noted in data\ports). Otherwise the key goes to the app in front as usual.
+$PortsDir = Join-Path $TV.Data 'ports'
+$SpotifyButtons = @{ playpause = 'control-button-playpause'; next = 'control-button-skip-forward'; prev = 'control-button-skip-back' }
+function Invoke-PageScript([int]$Port, [string]$UrlLike, [string]$Expression) {
+    $targets = Invoke-RestMethod "http://127.0.0.1:$Port/json" -TimeoutSec 2 -UseBasicParsing
+    $t = @($targets | Where-Object { $_.type -eq 'page' -and $_.url -like $UrlLike }) | Select-Object -First 1
+    if (-not $t) { return $null }
+    $ws = New-Object Net.WebSockets.ClientWebSocket
+    try {
+        if (-not $ws.ConnectAsync([Uri]$t.webSocketDebuggerUrl, [Threading.CancellationToken]::None).Wait(3000)) { return $null }
+        $msg = @{ id = 1; method = 'Runtime.evaluate'; params = @{ expression = $Expression; returnByValue = $true; userGesture = $true } } | ConvertTo-Json -Depth 5 -Compress
+        $bytes = [Text.Encoding]::UTF8.GetBytes($msg)
+        $ws.SendAsync([ArraySegment[byte]]::new($bytes), 'Text', $true, [Threading.CancellationToken]::None).Wait(2000) | Out-Null
+        $buf = New-Object byte[] 65536
+        $deadline = (Get-Date).AddSeconds(3)
+        while ((Get-Date) -lt $deadline) {
+            $ms = New-Object IO.MemoryStream
+            do {
+                $task = $ws.ReceiveAsync([ArraySegment[byte]]::new($buf), [Threading.CancellationToken]::None)
+                if (-not $task.Wait(3000)) { return $null }
+                $ms.Write($buf, 0, $task.Result.Count)
+            } until ($task.Result.EndOfMessage)
+            $r = [Text.Encoding]::UTF8.GetString($ms.ToArray()) | ConvertFrom-Json
+            if ($r.id -eq 1) { return $r.result.result.value }
+        }
+        return $null
+    } finally {
+        try { $ws.CloseAsync('NormalClosure', '', [Threading.CancellationToken]::None).Wait(1000) | Out-Null } catch { }
+        $ws.Dispose()
+    }
+}
+# The debugging port of the open Spotify window, if any.
+function Get-SpotifyPort {
+    if (-not (Test-Path $PortsDir)) { return $null }
+    foreach ($f in Get-ChildItem $PortsDir -Filter '*.txt' -ErrorAction SilentlyContinue) {
+        if ($f.BaseName -notmatch 'spotify') { continue }
+        $p = [int]([IO.File]::ReadAllText($f.FullName).Trim())
+        try { $null = Invoke-RestMethod "http://127.0.0.1:$p/json/version" -TimeoutSec 1 -UseBasicParsing; return $p } catch { Remove-Item $f.FullName -ErrorAction SilentlyContinue }
+    }
+    return $null
+}
+# Is the window in front one where the media keys mean Spotify (the home screen, Spotify, or nothing)?
+function Test-MediaForSpotify {
+    if ($Standby) { return $true }
+    $pid0 = [TVHelper.Keys]::ForegroundPid()
+    $p = Get-CimInstance Win32_Process -Filter "ProcessId=$pid0" -ErrorAction SilentlyContinue
+    if (-not $p -or -not $p.CommandLine) { return $true }
+    if ($p.Name -ne 'msedge.exe') { return -not $TestMode }       # (test mode: not when another program is in front)
+    return $p.CommandLine -match 'TVLauncher\\profiles\\(launcher|[^\\"]*spotify)'
+}
+function Invoke-SpotifyMedia([string]$Action) {
+    if (-not $SpotifyButtons.ContainsKey($Action)) { return $false }
+    if (-not (Test-MediaForSpotify)) { return $false }
+    $port = Get-SpotifyPort
+    if (-not $port) { return $false }
+    $id = $SpotifyButtons[$Action]
+    $js = "(() => { const b = document.querySelector('[data-testid=""$id""]'); if (!b || b.disabled) return false; b.click(); return true; })()"
+    try { $ok = [bool](Invoke-PageScript $port 'https://open.spotify.com*' $js) } catch { $ok = $false }
+    Log "media key $Action -> Spotify: $(if ($ok) { 'pressed' } else { 'button not found' })"
+    return $ok
+}
+
 # ---------- phone remote ----------
 # A second, small web service on the home network (port settings.remotePort, default 8766): the remote page for a
 # phone (launcher/remote/index.html) and the buttons it presses. Every button needs the pairing key, which only the
@@ -721,8 +788,10 @@ function Handle-Remote($ctx) {
         Send-Response $ctx 200 @{ ok = $true; volume = (Get-VolumeState); standby = [bool]$Standby; nowPlaying = $np; version = $TV.Version }; return
     }
     if ($method -eq 'POST' -and $path -match '^/api/key/([a-z]+)$') {
-        $k = $RemoteKeys[$Matches[1]]
+        $name = $Matches[1]
+        $k = $RemoteKeys[$name]
         if (-not $k) { Send-Response $ctx 400 @{ error = 'unknown key' }; return }
+        if ($name -in 'playpause', 'next', 'prev' -and (Invoke-SpotifyMedia $name)) { Send-Response $ctx 200 @{ ok = $true }; return }
         Send-Response $ctx 200 @{ ok = $true }                         # answer first: the key may take a moment
         if (Test-RemoteTarget) { [TVHelper.Keys]::Press([uint16]$k[0], [bool]$k[1]) }; return
     }
@@ -872,6 +941,7 @@ function Handle-Request {
         '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
 
         '^POST /screen-off$' { Send-Response $ctx 200 (Invoke-Power 'screen-off' 'idle on home screen'); return }
+        '^POST /media/(playpause|next|prev)$' { Send-Response $ctx 200 @{ handled = (Invoke-SpotifyMedia $Matches[1]) }; return }
         '^GET /update$' { Send-Response $ctx 200 (Get-UpdateState); return }
         '^POST /update/check$' { [void](Test-Update); Send-Response $ctx 200 (Get-UpdateState); return }
         '^POST /update/install$' { Send-Response $ctx 200 (Start-UpdateInstall); return }

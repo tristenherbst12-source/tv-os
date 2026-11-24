@@ -115,7 +115,7 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 | Home | Screensaver (photos, time, music); any button ends it | Back to the home screen |
 | Watching a video | | Opens full screen. Left/Right skip 10 s (not on live streams), OK pauses/plays, Up/Down show the player's controls (gear, quality, subtitles) with the highlight on them, Back hides them, Back again leaves the video |
 | Volume | A volume pop-up at the top of the screen shows the level | Same |
-| Play/Pause | Works in the apps | |
+| Play/Pause, Next, Previous | Control Spotify (also on the screensaver and in standby) | In Spotify: Spotify. In a video app: that app |
 | L (keyboard) | Lite Mode on/off (less animation, if the PC struggles) | |
 
 - The pointer disappears while you use the buttons; touch the touchpad and it comes back.
