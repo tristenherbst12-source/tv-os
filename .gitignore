@@ -7,3 +7,4 @@ wake-report.txt
 
 # The GitHub token on its way to the TV on the USB stick (setup stores it encrypted, then deletes this)
 github-token.txt
+net-report.txt

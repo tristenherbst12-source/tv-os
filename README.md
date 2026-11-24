@@ -196,6 +196,11 @@ settings stay as they are.
 - **The remote does not wake the PC from Sleep:** in an administrator PowerShell, `cd C:\TVLauncher` then
   `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\wake-check.ps1 -Apply`, restart, and try again. It
   writes `C:\TVLauncher\wake-report.txt` and lists the next steps (a USB keyboard test, the BIOS).
+- **The phone remote does not open, or Settings > Updates cannot reach GitHub:** in an administrator PowerShell,
+  `cd C:\TVLauncher` then `powershell -NoProfile -ExecutionPolicy Bypass -File scripts\net-check.ps1 -Apply`. It
+  fixes what it can (network set to Private, TLS for PowerShell, the remote's firewall rule) and writes
+  `C:\TVLauncher\net-report.txt` saying what still stops it. If everything there is fine and the phone still cannot
+  reach the TV, the router keeps devices apart: turn off "AP isolation" / "client isolation" for your home Wi-Fi.
 - **Wi-Fi or Bluetooth settings do not open:** `helper.log` says why. To join a Wi-Fi network once, you can also use
   Settings > Windows Desktop and the network icon there, then restart.
 - **Trying it on another PC without changing it:** `scripts\start.cmd -Windowed` runs it in a window in test mode

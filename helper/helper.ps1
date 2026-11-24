@@ -542,10 +542,38 @@ function Invoke-GitHub([string]$Path, [string]$Accept = 'application/vnd.github+
             return Invoke-RestMethod -Uri $uri -Headers $h -TimeoutSec 20 -UseBasicParsing
         } catch {
             $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
-            if (-not ($useToken -and $code -eq 401)) { throw }
-            Log 'updates: the stored GitHub token was refused (expired?): trying without it'
+            if ($useToken -and $code -eq 401) { Log 'updates: the stored GitHub token was refused (expired?): trying without it'; continue }
+            if ($code) { throw }
+            # No answer at all through PowerShell's own web access (on the TV PC GitHub "could not be reached" while
+            # Edge streamed fine): the same request with curl.exe, which comes with Windows 10 and uses its own stack.
+            Log "updates: PowerShell could not reach GitHub ($(Get-ErrorChain $_.Exception)); trying curl.exe"
+            return Invoke-GitHubCurl $uri $h $OutFile
         }
     }
+}
+# Every message in an error and its causes ("Unable to connect" says little; the inner one says why).
+function Get-ErrorChain($ex) {
+    $parts = @()
+    for ($e = $ex; $e; $e = $e.InnerException) { $parts += $e.Message }
+    return ($parts | Select-Object -Unique) -join ' <- '
+}
+function Invoke-GitHubCurl([string]$Uri, $Headers, [string]$OutFile) {
+    $curl = Join-Path $env:WINDIR 'System32\curl.exe'
+    if (-not (Test-Path $curl)) { throw 'GitHub could not be reached (and curl.exe is missing)' }
+    $a = @('-sS', '-L', '--max-time', $(if ($OutFile) { '300' } else { '25' }), '-w', '%{http_code}')
+    foreach ($k in $Headers.Keys) { $a += @('-H', "${k}: $($Headers[$k])") }
+    $body = Join-Path $env:TEMP "tv-gh-$PID.txt"
+    $a += @('-o', $(if ($OutFile) { $OutFile } else { $body }), $Uri)
+    $status = (& $curl @a 2>&1) -join ' '
+    if ($LASTEXITCODE -ne 0) { throw "GitHub could not be reached (curl $LASTEXITCODE): $status" }
+    $code = [int]($status -replace '\D', '')
+    if ($code -lt 200 -or $code -ge 300) { Remove-Item $body -ErrorAction SilentlyContinue; throw "GitHub answered $code" }
+    Log 'updates: reached GitHub with curl.exe'
+    if ($OutFile) { return }
+    $text = [IO.File]::ReadAllText($body, [Text.Encoding]::UTF8)
+    Remove-Item $body -ErrorAction SilentlyContinue
+    if ($Headers.Accept -like '*raw*') { return $text }
+    return $text | ConvertFrom-Json
 }
 # 0.12.0 vs 0.13.1: compares number by number.
 function Compare-Version([string]$a, [string]$b) {
@@ -575,7 +603,7 @@ function Test-Update {
         $Update.error = if (($code -eq 404 -or $code -eq 401) -and -not (Get-GitHubToken)) { 'needs a GitHub token (run setup)' }
                         elseif ($code -eq 401 -or $code -eq 403 -or $code -eq 404) { 'the GitHub token was refused (run setup to enter a new one)' }
                         else { 'could not reach GitHub' }
-        Log "updates: check failed ($code): $($_.Exception.Message)"
+        Log "updates: check failed ($code): $(Get-ErrorChain $_.Exception)"
     }
     return $Update
 }

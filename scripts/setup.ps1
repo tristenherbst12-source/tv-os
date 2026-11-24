@@ -316,9 +316,14 @@ if (Want 'remote') {
                 -Profile Private, Domain -Action Allow | Out-Null
         }.GetNewClosure()
     }
-    $prof = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Connectivity -ne 'Disconnected' } | Select-Object -First 1
-    if ($prof -and $prof.NetworkCategory -eq 'Public') {
-        Write-Warn "this network ($($prof.Name)) is set to Public: phones cannot reach the TV. Settings > Network > the network > Private."
+    # Windows lets nothing in on a "Public" network (the rule above is for private ones), so the home network the TV
+    # is on is made Private, as for any home PC.
+    foreach ($prof in @(Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Connectivity -ne 'Disconnected' })) {
+        if ($prof.NetworkCategory -eq 'Public') {
+            Invoke-Change "set the network ""$($prof.Name)"" to Private (phones on it can then reach the TV)" {
+                Set-NetConnectionProfile -InterfaceIndex $prof.InterfaceIndex -NetworkCategory Private
+            }.GetNewClosure()
+        } else { Write-Ok "network ""$($prof.Name)"" is $($prof.NetworkCategory)" }
     }
 }
 
@@ -334,13 +339,26 @@ if (Want 'github') {
     $plainFile = Join-Path $Root 'github-token.txt'
     $fromFile = Test-Path $plainFile
     # A public repository needs no token at all.
-    $public = $false
+    $public = $false; $reached = $false
     try {
         [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
         $r = Invoke-RestMethod "https://api.github.com/repos/$($ucfg.repo)" -Headers @{ 'User-Agent' = 'tv-launcher' } -TimeoutSec 20 -UseBasicParsing
-        $public = -not $r.private
-    } catch { }
-    if ($public -and -not $NewToken) {
+        $public = -not $r.private; $reached = $true
+    } catch {
+        if ($_.Exception.Response) { $reached = $true }          # GitHub answered (404: private, or no such repository)
+        else {
+            # (PowerShell's own web access could not get through on the TV PC: the same with curl.exe)
+            $curl = Join-Path $env:WINDIR 'System32\curl.exe'
+            if (Test-Path $curl) {
+                $j = (& $curl -sS --max-time 20 -H 'User-Agent: tv-launcher' "https://api.github.com/repos/$($ucfg.repo)" 2>$null) -join "`n"
+                try { $o = $j | ConvertFrom-Json; $reached = $true; $public = $o.private -eq $false } catch { }
+            }
+        }
+    }
+    if (-not $reached -and -not $fromFile -and -not $NewToken) {
+        Write-Warn "GitHub could not be reached from this PC (PowerShell and curl.exe). Run scripts\net-check.ps1 to see why; the TV keeps trying by itself."
+    }
+    elseif ($public -and -not $NewToken) {
         Write-Ok "$($ucfg.repo) is public: no GitHub token needed"
         if ($fromFile) { Invoke-Change 'delete github-token.txt (not needed: the repository is public)' { Remove-Item $plainFile -Force }.GetNewClosure() }
     }

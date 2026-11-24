@@ -492,3 +492,12 @@ passes the pinned Play bar. Twitch home: the big featured stream is not a stop.
   there is one and retries without it when GitHub refuses it (401). Checked before going public: no secrets in the
   history (helper-token.js, github-token.* and settings are ignored; settings.json holds no PIN). Tested the real
   check against the public repository with no token, and with a refused token stored.
+- **First TV PC run (24 Nov):** setup said GitHub could not be reached (so it asked for a token) and Settings >
+  Updates "could not connect to GitHub", while Edge streamed fine; the phone got ERR_ADDRESS_UNREACHABLE on the
+  address in the QR code (so the remote was listening on the network). Changes: the helper falls back to curl.exe
+  when PowerShell's web access gets no answer (tested: VERSION, commit and the zip download) and logs the whole
+  error chain; setup step 13 uses the same fallback and asks for no token when GitHub cannot be reached at all;
+  setup step 12 sets a Public network to Private; new scripts/net-check.ps1 (-Apply) reports DNS, port 443, proxy,
+  .NET strong crypto, clock, PowerShell vs curl.exe, the remote's listener, URL reservation, firewall rule and
+  profiles, and a request to the remote from the PC itself, to net-report.txt. Unreachable from the phone with all
+  of that fine = the router isolates Wi-Fi clients.
