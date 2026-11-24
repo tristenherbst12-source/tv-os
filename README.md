@@ -86,6 +86,10 @@ Type `SETUP` when it asks, and the `TV` account's Windows password when it asks 
 9. Lists the apps and where each one opens.
 10. Copies each app's own icon onto its tile.
 11. Sets Edge up for the TV windows (no account sign-in or sync in them, no welcome pages).
+12. Lets phones on the home network reach the phone remote (a firewall rule for the local network only). The
+    network must be set to Private in Windows.
+13. Asks once for a GitHub token so the TV can see new versions (see "Updating the launcher"). Press Enter to
+    skip; `-NewToken` enters a new one later.
 
 You can run it again any time; it only changes what is different. To leave steps out, add for example
 `-Skip debloat,autologin`.
@@ -131,6 +135,10 @@ Restart the PC. It should sign in by itself and open the home screen. Then, with
 - **Screensaver:** after 5 minutes untouched on the home screen (never while an app is open), or when you press
   Home on the home screen: nature photos (Wikimedia Commons, credited on screen) with the time, date and the song
   Spotify is playing. Any button ends it. Settings > Screensaver changes the time or turns it off.
+- **Phone remote:** Settings > Phone Remote shows a QR code. Scan it with your phone's camera (same Wi-Fi as the
+  TV): your phone becomes a remote with arrows, OK, Back, Home, play/pause, volume, and a box to **type** into the
+  TV (searches, sign-ins). Add the page to the phone's home screen to keep it. Any button also wakes the TV from
+  standby.
 - **Settings** has the volume, sound output, sleep timer, screensaver, screen-off timer, wallpaper, Lite Mode, Wi-Fi, Bluetooth
   and a network speed test.
 - **Power** has Standby, Restart and Shut Down. **Standby** is how the TV PC "turns off": the screen goes off, the
@@ -151,8 +159,19 @@ Restarting the PC brings the TV home screen back.
 
 ## Updating the launcher
 
-Copy the new files over `C:\TVLauncher`, but keep your `config\settings.json` (it holds your settings and desktop
-PIN). Then run setup again (step 5) and restart, or use Settings > Restart Launcher.
+**From the TV:** the TV checks the GitHub repository (`config\updates.json`) every few hours. When a newer
+version is there, the home screen says **New Update Available** with **Update Now** and **Later**; Settings >
+Updates does the same by hand. Update Now downloads it, copies it over `C:\TVLauncher` (your settings stay) and
+restarts the home screen. If the update changed the setup, the TV says so: run setup once more (step 5).
+
+- The repository is private, so the TV needs a token that can only read it. On github.com: Settings > Developer
+  settings > Fine-grained tokens > Generate: only this repository, Contents: Read-only. Setup (step 13) asks for it
+  and stores it encrypted for the `TV` account.
+- A new version is announced by raising the number in `VERSION` and pushing to `main`.
+
+**By hand** (the first time, or without internet): copy the new files over `C:\TVLauncher`, but keep your
+`config\settings.json` (it holds your settings and desktop PIN). Then run setup again (step 5) and restart, or use
+Settings > Restart Launcher.
 
 ## Undoing it
 

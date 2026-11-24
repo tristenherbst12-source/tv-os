@@ -77,6 +77,15 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       after its advert, and Right/Left skip 10 s.
 - [ ] Logins still there after a restart.
 
+## Phone remote and updates
+- [ ] Setup step 12 done; the network is Private. Settings > Phone Remote shows the TV's address (not
+      "localhost") and a QR code; the phone opens the remote page from it.
+- [ ] Arrows, OK, Back, Home, play/pause and volume work from the phone; typing a search into YouTube works;
+      a button on the phone wakes the TV from standby.
+- [ ] Setup step 13 stored the GitHub token; Settings > Updates says "Up to Date" (not "needs a GitHub token").
+- [ ] After the next pushed version: the home screen shows "New Update Available"; Update Now installs it and the
+      home screen comes back saying "Updated to ...".
+
 ## Continue Watching
 - [ ] Watch something for a minute in YouTube, Netflix or DStv, press Home: a Continue Watching row shows it
       (picture, title, time left).
