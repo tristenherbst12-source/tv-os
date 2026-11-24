@@ -198,6 +198,25 @@
     } catch (e) { TV.ui.toast(e.status === 403 ? 'Wrong PIN' : 'Could Not Open the Desktop'); }
   }
 
+  /* ---------- phone remote: a QR code the phone's camera opens (helper.ps1 serves the remote page) ---------- */
+  async function showPhoneRemote() {
+    if (!needHelper()) return;
+    let info;
+    try { info = await H.request('/remote-info'); } catch (e) { TV.ui.toast('Could Not Start the Phone Remote'); return; }
+    const d = TV.ui.live({ title: 'Phone Remote' });
+    const box = el('div', 'qr-box');
+    const qr = qrcode(0, 'M');                    // js/vendor/qrcode.js (MIT, Kazuhiko Arase)
+    qr.addData(info.url);
+    qr.make();
+    box.innerHTML = qr.createSvgTag({ cellSize: 6, margin: 3, scalable: true });
+    const steps = el('div', 'dialog-text', info.network
+      ? 'Scan with your phone’s camera (same Wi-Fi as the TV). Then add the page to the home screen to keep it.'
+      : 'Phones cannot reach the TV yet: run setup once (step 5 of the README) to allow it on the home network.');
+    const addr = el('div', 'qr-addr', info.address.replace(/^https?:\/\//, ''));
+    d.body.append(box, steps, addr);
+    d.setButtons([{ label: 'Done', value: true }]).then(() => d.close());
+  }
+
   /* ---------- network speed test (js/speedtest.js) ---------- */
   async function runSpeedTest() {
     if (!navigator.onLine) { TV.ui.toast('No Internet Connection'); return; }
@@ -320,6 +339,8 @@
 
     goRow({ name: 'Network Speed Test', hint: 'Checks the Download and Upload Speed', accent: '#14c3b4',
       ctl: el('span', 'go', 'Start ›'), ok: runSpeedTest });
+    goRow({ name: 'Phone Remote', hint: 'Use Your Phone as a Remote and Keyboard', accent: '#14c3b4',
+      ctl: el('span', 'go', 'Show Code ›'), ok: showPhoneRemote });
 
     group('System');
     goRow({ name: 'Restart Launcher', hint: 'Reloads This Home Screen', accent: '#8a8fb3', ctl: el('span', 'go', 'Restart ›'),

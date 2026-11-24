@@ -25,6 +25,10 @@
 #   POST /screen-off               turn the display off now
 #   POST /power/{standby|restart|shutdown}   (sleep = standby: screen off, muted, low power; a button ends it)
 #   GET  /standby                   {standby, since}
+#   GET  /remote-info               the phone remote's address and pairing link (for the QR code)
+# Phone remote (home network, port settings.remotePort, default 8766): GET / (the page); with header X-Remote-Key:
+#   GET /api/status, POST /api/key/{up|down|left|right|ok|back|home|playpause|next|prev|volup|voldown|mute},
+#   POST /api/text {text, enter}, POST /api/erase
 #   POST /open-settings/{wifi|bluetooth|sound}   open that Windows Settings page
 #   POST /restart-launcher
 #   GET  /desktop, POST /desktop    escape hatch: start explorer.exe (PIN-checked when one is set)
@@ -503,6 +507,108 @@ function Get-Status {
     }
 }
 
+# ---------- phone remote ----------
+# A second, small web service on the home network (port settings.remotePort, default 8766): the remote page for a
+# phone (launcher/remote/index.html) and the buttons it presses. Every button needs the pairing key, which only the
+# QR code on the TV carries (Settings > Phone Remote). Setup opens the port for the home network only.
+$RemoteDir  = Join-Path $TV.Launcher 'remote'
+$RemotePort = $(if ((Get-Settings).remotePort) { [int](Get-Settings).remotePort } else { 8766 })
+$RemoteListener = $null
+$RemoteOnNetwork = $false
+function Start-RemoteListener {
+    foreach ($p in @("http://+:$RemotePort/", "http://localhost:$RemotePort/")) {
+        try {
+            $l = New-Object Net.HttpListener
+            $l.Prefixes.Add($p)
+            $l.Start()
+            $script:RemoteOnNetwork = $p.StartsWith('http://+')
+            Log "phone remote on $p$(if (-not $RemoteOnNetwork) { ' (this PC only: run setup to allow phones on the network)' })"
+            return $l
+        } catch { }
+    }
+    Log 'phone remote: could not start'
+    return $null
+}
+# The TV's address on the home network (the adapter with the default route).
+function Get-LanAddress {
+    try {
+        $c = Get-NetIPConfiguration -ErrorAction Stop | Where-Object { $_.IPv4DefaultGateway -and $_.NetAdapter.Status -eq 'Up' } | Select-Object -First 1
+        if ($c) { return @($c.IPv4Address)[0].IPAddress }
+    } catch { }
+    return $null
+}
+function Get-RemoteInfo {
+    $ip = Get-LanAddress
+    $hostPart = if ($RemoteOnNetwork -and $ip) { $ip } else { 'localhost' }
+    return @{ url = "http://${hostPart}:$RemotePort/#k=$($Helper.remoteKey)"; address = "http://${hostPart}:$RemotePort"; network = [bool]($RemoteOnNetwork -and $ip); running = [bool]$RemoteListener }
+}
+# Remote buttons -> the keys a keyboard or the remote sends (virtual-key code, extended key).
+$RemoteKeys = @{
+    up = @(0x26, $true); down = @(0x28, $true); left = @(0x25, $true); right = @(0x27, $true)
+    ok = @(0x0D, $false); back = @(0x08, $false); home = @(0xAC, $true)
+    playpause = @(0xB3, $true); next = @(0xB0, $true); prev = @(0xB1, $true)
+    volup = @(0xAF, $true); voldown = @(0xAE, $true); mute = @(0xAD, $true)
+}
+function Send-Plain($ctx, [int]$Status, [string]$Text, [string]$Type) {
+    $res = $ctx.Response
+    $bytes = [Text.Encoding]::UTF8.GetBytes($Text)
+    $res.StatusCode = $Status
+    $res.ContentType = $Type
+    $res.AddHeader('Cache-Control', 'no-cache')
+    $res.ContentLength64 = $bytes.Length
+    $res.OutputStream.Write($bytes, 0, $bytes.Length)
+    $res.Close()
+}
+# On the TV the keys always go to the window in front. In test mode (someone's own PC) only to the TV's windows, so
+# a phone can never type into whatever else happens to be open there.
+function Test-RemoteTarget {
+    if (-not $TestMode) { return $true }
+    $p = Get-CimInstance Win32_Process -Filter "ProcessId=$([TVHelper.Keys]::ForegroundPid())" -ErrorAction SilentlyContinue
+    $ok = [bool]($p -and $p.CommandLine -like '*TVLauncher\profiles\*')
+    if (-not $ok) { Log "TEST MODE: phone remote key not sent (a TV window is not in front: $(if ($p) { $p.Name } else { 'none' }))" }
+    return $ok
+}
+function Handle-Remote($ctx) {
+    $req = $ctx.Request
+    $path = $req.Url.AbsolutePath
+    $method = $req.HttpMethod
+    # The page itself holds no secrets (the key stays in the phone).
+    $files = @{ '/' = @('index.html', 'text/html; charset=utf-8'); '/index.html' = @('index.html', 'text/html; charset=utf-8')
+                '/manifest.webmanifest' = @('manifest.webmanifest', 'application/manifest+json'); '/icon.svg' = @('icon.svg', 'image/svg+xml') }
+    if ($method -eq 'GET' -and $files.ContainsKey($path)) {
+        $f = $files[$path]
+        Send-Plain $ctx 200 ([IO.File]::ReadAllText((Join-Path $RemoteDir $f[0]), [Text.Encoding]::UTF8)) $f[1]; return
+    }
+    if ($req.Headers['X-Remote-Key'] -ne $Helper.remoteKey) { Send-Response $ctx 401 @{ error = 'not paired' }; return }
+    if ($method -eq 'GET' -and $path -eq '/api/status') {
+        $np = $null
+        $npFile = Join-Path $TV.Data 'now-playing.json'
+        try { if ((Test-Path $npFile) -and ((Get-Date) - (Get-Item $npFile).LastWriteTime).TotalSeconds -lt 30) { $np = [IO.File]::ReadAllText($npFile) | ConvertFrom-Json } } catch { }
+        Send-Response $ctx 200 @{ ok = $true; volume = (Get-VolumeState); standby = [bool]$Standby; nowPlaying = $np; version = $TV.Version }; return
+    }
+    if ($method -eq 'POST' -and $path -match '^/api/key/([a-z]+)$') {
+        $k = $RemoteKeys[$Matches[1]]
+        if (-not $k) { Send-Response $ctx 400 @{ error = 'unknown key' }; return }
+        Send-Response $ctx 200 @{ ok = $true }                         # answer first: the key may take a moment
+        if (Test-RemoteTarget) { [TVHelper.Keys]::Press([uint16]$k[0], [bool]$k[1]) }; return
+    }
+    if ($method -eq 'POST' -and $path -eq '/api/text') {
+        $b = Read-Body $ctx
+        $t = [string]$b.text
+        if ($t.Length -gt 300) { $t = $t.Substring(0, 300) }
+        Send-Response $ctx 200 @{ ok = $true }
+        if (-not (Test-RemoteTarget)) { return }
+        if ($t) { [TVHelper.Keys]::Type($t) }
+        if ($b.enter) { Start-Sleep -Milliseconds 80; [TVHelper.Keys]::Press(0x0D, $false) }
+        return
+    }
+    if ($method -eq 'POST' -and $path -eq '/api/erase') {               # clear the text box: Ctrl+A, Backspace
+        Send-Response $ctx 200 @{ ok = $true }
+        if (Test-RemoteTarget) { [TVHelper.Keys]::CtrlA(); Start-Sleep -Milliseconds 40; [TVHelper.Keys]::Press(0x08, $false) }; return
+    }
+    Send-Response $ctx 404 @{ error = 'not found' }
+}
+
 # ---------- HTTP plumbing ----------
 function Send-Response {
     param($ctx, [int]$Status, $Body)
@@ -632,6 +738,7 @@ function Handle-Request {
         '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
 
         '^POST /screen-off$' { Send-Response $ctx 200 (Invoke-Power 'screen-off' 'idle on home screen'); return }
+        '^GET /remote-info$' { Send-Response $ctx 200 (Get-RemoteInfo); return }
         '^GET /standby$' { Send-Response $ctx 200 @{ standby = [bool]$Standby; since = $(if ($Standby) { $Standby.since.ToString('o') } else { $null }) }; return }
         '^POST /power/(sleep|standby|restart|shutdown)$' {
             $action = $Matches[1]
@@ -706,16 +813,29 @@ function Test-LauncherOnOurPage {
 }
 
 $lastCheck = Get-Date '2000-01-01'
+$RemoteListener = Start-RemoteListener
 $task = $listener.GetContextAsync()
+$rtask = if ($RemoteListener) { $RemoteListener.GetContextAsync() } else { $null }
 try {
     while ($listener.IsListening) {
-        if ($task.Wait(1000)) {
+        # The launcher's requests and the phone remote's, whichever comes first (or a second goes by).
+        $waits = if ($rtask) { [Threading.Tasks.Task[]]@($task, $rtask) } else { [Threading.Tasks.Task[]]@($task) }
+        $which = [Threading.Tasks.Task]::WaitAny($waits, 1000)
+        if ($which -eq 0) {
             $ctx = $task.Result
             $task = $listener.GetContextAsync()
             try { Handle-Request $ctx }
             catch {
                 Log "error on $($ctx.Request.HttpMethod) $($ctx.Request.Url.AbsolutePath): $($_.Exception.Message)"
                 try { Send-Response $ctx 500 @{ error = $_.Exception.Message } } catch { }
+            }
+        } elseif ($which -eq 1) {
+            $ctx = $rtask.Result
+            $rtask = $RemoteListener.GetContextAsync()
+            try { Handle-Remote $ctx }
+            catch {
+                Log "phone remote error on $($ctx.Request.HttpMethod) $($ctx.Request.Url.AbsolutePath): $($_.Exception.Message)"
+                try { Send-Response $ctx 500 @{ error = 'failed' } } catch { }
             }
         }
         try { Test-SleepTimer } catch { Log "sleep timer error: $($_.Exception.Message)" }
@@ -744,5 +864,6 @@ try {
     }
 } finally {
     $listener.Stop()
+    if ($RemoteListener) { try { $RemoteListener.Stop() } catch { } }
     $mutex.ReleaseMutex()
 }

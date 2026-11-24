@@ -96,6 +96,13 @@ function Get-HelperInfo {
         $info = [pscustomobject]@{ port = $port; token = $token }
         Write-TextAtomic $TV.HelperJson ($info | ConvertTo-Json -Compress)
     }
+    # The phone remote's pairing key (in the QR code the TV shows; a phone without it cannot press anything).
+    if (-not $info.remoteKey) {
+        $bytes = New-Object byte[] 18
+        [Security.Cryptography.RandomNumberGenerator]::Create().GetBytes($bytes)
+        $info | Add-Member -NotePropertyName remoteKey -NotePropertyValue ([Convert]::ToBase64String($bytes).Replace('+', '-').Replace('/', '_').TrimEnd('=')) -Force
+        Write-TextAtomic $TV.HelperJson ($info | ConvertTo-Json -Compress)
+    }
     # Always refresh the launcher's copy (the install folder may have been replaced).
     Write-TextAtomic $TV.TokenJs ("/* Written by the helper on start. Do not commit. */`nwindow.TV_HELPER = " + ($info | ConvertTo-Json -Compress) + ";`n")
     return $info

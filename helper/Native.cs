@@ -246,4 +246,47 @@ namespace TVHelper {
       for (int role = 0; role < 3; role++) Com.Check(pc.SetDefaultEndpoint(id, role));
     }
   }
+
+  // ---------- phone remote: key presses and typing, as a keyboard would send them ----------
+  public static class Keys {
+    [StructLayout(LayoutKind.Sequential)] struct KEYBDINPUT { public ushort wVk; public ushort wScan; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+    [StructLayout(LayoutKind.Sequential)] struct MOUSEINPUT { public int dx; public int dy; public uint mouseData; public uint dwFlags; public uint time; public IntPtr dwExtraInfo; }
+    [StructLayout(LayoutKind.Explicit)] struct INPUTUNION { [FieldOffset(0)] public MOUSEINPUT mi; [FieldOffset(0)] public KEYBDINPUT ki; }
+    [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public INPUTUNION u; }
+    [DllImport("user32.dll", SetLastError = true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
+    const uint KEYUP = 2, EXTENDED = 1, UNICODE = 4;
+
+    static INPUT Key(ushort vk, ushort scan, uint flags) {
+      var i = new INPUT { type = 1 };
+      i.u.ki = new KEYBDINPUT { wVk = vk, wScan = scan, dwFlags = flags };
+      return i;
+    }
+    // One key press (down and up). Arrows, Home, the media and volume keys are "extended" keys.
+    public static void Press(ushort vk, bool extended) {
+      uint f = extended ? EXTENDED : 0;
+      var down = new[] { Key(vk, 0, f) };
+      var up = new[] { Key(vk, 0, f | KEYUP) };
+      SendInput(1, down, Marshal.SizeOf(typeof(INPUT)));
+      System.Threading.Thread.Sleep(30);
+      SendInput(1, up, Marshal.SizeOf(typeof(INPUT)));
+    }
+    [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
+    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
+    // The process of the window in front (test mode only sends keys to the TV's own windows).
+    public static uint ForegroundPid() { uint pid; GetWindowThreadProcessId(GetForegroundWindow(), out pid); return pid; }
+    // Ctrl+A (select everything in the text box, so the next Backspace clears it).
+    public static void CtrlA() {
+      var seq = new[] { Key(0x11, 0, 0), Key(0x41, 0, 0), Key(0x41, 0, KEYUP), Key(0x11, 0, KEYUP) };
+      SendInput((uint)seq.Length, seq, Marshal.SizeOf(typeof(INPUT)));
+    }
+    // Types text into the box that has focus (any characters, as Unicode).
+    public static void Type(string text) {
+      var list = new List<INPUT>();
+      foreach (char c in text) {
+        if (c == '\n') { list.Add(Key(0x0D, 0, 0)); list.Add(Key(0x0D, 0, KEYUP)); continue; }
+        list.Add(Key(0, c, UNICODE)); list.Add(Key(0, c, UNICODE | KEYUP));
+      }
+      if (list.Count > 0) SendInput((uint)list.Count, list.ToArray(), Marshal.SizeOf(typeof(INPUT)));
+    }
+  }
 }

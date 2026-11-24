@@ -72,6 +72,14 @@ $data = Join-Path $user.LocalAppData 'TVLauncher'
 if (-not (Test-Path $data)) { Write-Ok 'none' }
 elseif ($RemoveData) { Invoke-Change "delete $data (TV Edge profiles and their sign-ins, logs, saved calendar)" { Remove-Item -Recurse -Force $data }.GetNewClosure() }
 else { Write-Info "kept: $data (add -RemoveData to delete it)" }
+
+Write-Section '6. Phone remote'
+$rule = Get-NetFirewallRule -DisplayName 'TV Launcher phone remote' -ErrorAction SilentlyContinue
+if ($rule) { Invoke-Change 'remove the firewall rule for the phone remote' { $rule | Remove-NetFirewallRule }.GetNewClosure() } else { Write-Ok 'no firewall rule' }
+$acls = ((& netsh.exe http show urlacl) -join "`n") -split "`n" | Where-Object { $_ -match 'http://\+:(\d+)/' -and $Matches[1] -ge 8765 -and $Matches[1] -le 8799 } |
+    ForEach-Object { ($_ -replace '.*?(http://\+:\d+/).*', '$1') }
+foreach ($u in @($acls | Select-Object -Unique)) { Invoke-Change "remove the URL reservation $u" { & netsh.exe http delete urlacl url=$u | Out-Null }.GetNewClosure() }
+if (-not $acls) { Write-Ok 'no URL reservation' }
 } finally { Close-TVUser $user }
 
 Write-Host ''

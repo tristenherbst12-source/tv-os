@@ -8,7 +8,7 @@
 #
 #   -TVUser <name>   the Windows account the TV runs as (default: the account running this)
 #   -Skip <steps>    leave out steps, e.g. -Skip debloat,autologin
-#                    (windows, timezone, debloat, updates, power, autologin, shell, install, apps, icons, edge)
+#                    (windows, timezone, debloat, updates, power, autologin, shell, install, apps, icons, edge, remote)
 #   -Yes             do not ask for the confirmation word (with -Apply)
 #
 # Undo with scripts\uninstall.ps1. See README.md.
@@ -282,6 +282,42 @@ if (Want 'edge') {
     }
     Invoke-Change 'refresh the launcher''s built-in copy of config\ (scripts\sync-defaults.ps1)' {
         & powershell.exe -NoProfile -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot 'sync-defaults.ps1') | Out-Null
+    }
+}
+
+# ---------- 12. Phone remote ----------
+# The helper serves the phone remote on the home network (Settings > Phone Remote shows its QR code). Windows only
+# lets a normal program listen on the network with a URL reservation, and the firewall must let phones in: from the
+# local network only, on private networks.
+Write-Section '12. Phone remote (home network)'
+if (Want 'remote') {
+    $settingsFile = Join-Path $Root 'config\settings.json'
+    $rs = if (Test-Path $settingsFile) { Get-Content -Raw -Encoding UTF8 $settingsFile | ConvertFrom-Json } else { $null }
+    $rport = if ($rs -and $rs.remotePort) { [int]$rs.remotePort } else { 8766 }
+    $url = "http://+:$rport/"
+    $acl = (& netsh.exe http show urlacl url=$url) -join "`n"
+    if ($acl -match [regex]::Escape($TVUser)) { Write-Ok "URL reservation $url for $TVUser" }
+    else {
+        Invoke-Change "let $TVUser's helper listen on the home network ($url)" {
+            & netsh.exe http delete urlacl url=$url 2>$null | Out-Null
+            $out = & netsh.exe http add urlacl url=$url "user=$env:COMPUTERNAME\$TVUser"
+            if ($LASTEXITCODE -ne 0) { throw ($out -join ' ') }
+        }.GetNewClosure()
+    }
+    $ruleName = 'TV Launcher phone remote'
+    $rule = Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue
+    $okRule = $rule -and (($rule | Get-NetFirewallPortFilter).LocalPort -eq "$rport") -and (($rule | Get-NetFirewallAddressFilter).RemoteAddress -contains 'LocalSubnet')
+    if ($okRule) { Write-Ok "firewall: port $rport open to the home network" }
+    else {
+        Invoke-Change "firewall: open port $rport to phones on the home network only" {
+            Get-NetFirewallRule -DisplayName $ruleName -ErrorAction SilentlyContinue | Remove-NetFirewallRule
+            New-NetFirewallRule -DisplayName $ruleName -Direction Inbound -Protocol TCP -LocalPort $rport -RemoteAddress LocalSubnet `
+                -Profile Private, Domain -Action Allow | Out-Null
+        }.GetNewClosure()
+    }
+    $prof = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Connectivity -ne 'Disconnected' } | Select-Object -First 1
+    if ($prof -and $prof.NetworkCategory -eq 'Public') {
+        Write-Warn "this network ($($prof.Name)) is set to Public: phones cannot reach the TV. Settings > Network > the network > Private."
     }
 }
 } finally { Close-TVUser $user }
