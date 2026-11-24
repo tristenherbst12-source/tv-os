@@ -89,7 +89,9 @@ Type `SETUP` when it asks, and the `TV` account's Windows password when it asks 
 12. Lets phones on the home network reach the phone remote (a firewall rule for the local network only). The
     network must be set to Private in Windows.
 13. Asks once for a GitHub token so the TV can see new versions (see "Updating the launcher"). Press Enter to
-    skip; `-NewToken` enters a new one later.
+    skip; `-NewToken` enters a new one later. Or bring it on the USB stick: a text file `github-token.txt` holding
+    only the token, in the `TVLauncher` folder. Setup stores it encrypted and deletes that file from the PC
+    (delete it from the stick yourself). It is never put in git.
 
 You can run it again any time; it only changes what is different. To leave steps out, add for example
 `-Skip debloat,autologin`.

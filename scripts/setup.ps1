@@ -329,17 +329,25 @@ Write-Section '13. Updates from GitHub'
 if (Want 'github') {
     $ucfg = Get-Content -Raw -Encoding UTF8 (Join-Path $Root 'config\updates.json') | ConvertFrom-Json
     $tokenFile = Join-Path $user.LocalAppData 'TVLauncher\github-token.bin'
-    if ((Test-Path $tokenFile) -and -not $NewToken) { Write-Ok "GitHub token stored (to enter a new one: add -NewToken)" }
+    # The token can come on the USB stick: a file github-token.txt in the launcher folder (never in git). Setup
+    # stores it encrypted and deletes the plain copy.
+    $plainFile = Join-Path $Root 'github-token.txt'
+    $fromFile = Test-Path $plainFile
+    if ((Test-Path $tokenFile) -and -not $NewToken -and -not $fromFile) { Write-Ok "GitHub token stored (to enter a new one: add -NewToken)" }
     elseif ($TVUser -ne $env:USERNAME) { Write-Warn "sign in as $TVUser and run setup there to store the GitHub token (it is encrypted for that account)" }
     else {
-        Write-Change "store a read-only GitHub token for $($ucfg.repo)"
+        Write-Change "store a read-only GitHub token for $($ucfg.repo)$(if ($fromFile) { ' (from github-token.txt, then delete that file)' })"
         if ($Apply) {
-            Write-Host ''
-            Write-Host "  The TV checks $($ucfg.repo) for new versions. Create a token at github.com > Settings >" -ForegroundColor Cyan
-            Write-Host '  Developer settings > Fine-grained tokens: only that repository, Contents: Read-only, no expiry' -ForegroundColor Cyan
-            Write-Host '  (or a long one). Paste it here (nothing shows while typing), or press Enter to skip.' -ForegroundColor Cyan
-            $sec = Read-Host '  GitHub token' -AsSecureString
-            $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)).Trim()
+            if ($fromFile) {
+                $plain = ([IO.File]::ReadAllText($plainFile)).Trim()
+            } else {
+                Write-Host ''
+                Write-Host "  The TV checks $($ucfg.repo) for new versions. Create a token at github.com > Settings >" -ForegroundColor Cyan
+                Write-Host '  Developer settings > Fine-grained tokens: only that repository, Contents: Read-only, no expiry' -ForegroundColor Cyan
+                Write-Host '  (or a long one). Paste it here (nothing shows while typing), or press Enter to skip.' -ForegroundColor Cyan
+                $sec = Read-Host '  GitHub token' -AsSecureString
+                $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)).Trim()
+            }
             if ($plain) {
                 try {
                     $h = @{ Authorization = "Bearer $plain"; 'User-Agent' = 'tv-launcher'; Accept = 'application/vnd.github+json' }
@@ -350,6 +358,10 @@ if (Want 'github') {
                     New-Item -ItemType Directory -Force (Split-Path -Parent $tokenFile) | Out-Null
                     [IO.File]::WriteAllBytes($tokenFile, $enc)
                     Write-Host '  [change] GitHub token checked and stored' -ForegroundColor Green
+                    if ($fromFile) {
+                        Remove-Item $plainFile -Force
+                        Write-Host '  [change] deleted github-token.txt from this PC (delete it from the USB stick too)' -ForegroundColor Green
+                    }
                 } catch { Write-Host "  [failed] GitHub did not accept that token for $($ucfg.repo): $($_.Exception.Message)" -ForegroundColor Red }
             } else { Write-Info 'skipped: no token (the TV will not see updates until setup stores one)' }
             $plain = $null

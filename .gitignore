@@ -4,3 +4,6 @@ launcher/js/helper-token.js
 # App icons copied from the PC by scripts/extract-icons.ps1 (brand assets, extracted on each machine)
 launcher/icons/*.png
 wake-report.txt
+
+# The GitHub token on its way to the TV on the USB stick (setup stores it encrypted, then deletes this)
+github-token.txt
