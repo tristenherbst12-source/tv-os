@@ -528,13 +528,24 @@ function Get-GitHubToken {
         return [Text.Encoding]::UTF8.GetString($plain).Trim()
     } catch { Log "updates: the stored GitHub token could not be read: $($_.Exception.Message)"; return $null }
 }
+# (A public repository needs no token. A stored one that GitHub refuses, such as an expired one, is then left out
+# and the request tried again without it.)
 function Invoke-GitHub([string]$Path, [string]$Accept = 'application/vnd.github+json', [string]$OutFile) {
-    $h = @{ Accept = $Accept; 'User-Agent' = 'tv-launcher'; 'X-GitHub-Api-Version' = '2022-11-28' }
     $t = Get-GitHubToken
-    if ($t) { $h.Authorization = "Bearer $t" }
     $uri = "https://api.github.com/repos/$($UpdateCfg.repo)$Path"
-    if ($OutFile) { Invoke-WebRequest -Uri $uri -Headers $h -OutFile $OutFile -UseBasicParsing -TimeoutSec 120 | Out-Null; return }
-    return Invoke-RestMethod -Uri $uri -Headers $h -TimeoutSec 20 -UseBasicParsing
+    foreach ($useToken in @($(if ($t) { $true }), $false)) {
+        if ($null -eq $useToken) { continue }
+        $h = @{ Accept = $Accept; 'User-Agent' = 'tv-launcher'; 'X-GitHub-Api-Version' = '2022-11-28' }
+        if ($useToken) { $h.Authorization = "Bearer $t" }
+        try {
+            if ($OutFile) { Invoke-WebRequest -Uri $uri -Headers $h -OutFile $OutFile -UseBasicParsing -TimeoutSec 120 | Out-Null; return }
+            return Invoke-RestMethod -Uri $uri -Headers $h -TimeoutSec 20 -UseBasicParsing
+        } catch {
+            $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+            if (-not ($useToken -and $code -eq 401)) { throw }
+            Log 'updates: the stored GitHub token was refused (expired?): trying without it'
+        }
+    }
 }
 # 0.12.0 vs 0.13.1: compares number by number.
 function Compare-Version([string]$a, [string]$b) {

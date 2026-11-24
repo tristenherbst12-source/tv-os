@@ -333,7 +333,18 @@ if (Want 'github') {
     # stores it encrypted and deletes the plain copy.
     $plainFile = Join-Path $Root 'github-token.txt'
     $fromFile = Test-Path $plainFile
-    if ((Test-Path $tokenFile) -and -not $NewToken -and -not $fromFile) { Write-Ok "GitHub token stored (to enter a new one: add -NewToken)" }
+    # A public repository needs no token at all.
+    $public = $false
+    try {
+        [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+        $r = Invoke-RestMethod "https://api.github.com/repos/$($ucfg.repo)" -Headers @{ 'User-Agent' = 'tv-launcher' } -TimeoutSec 20 -UseBasicParsing
+        $public = -not $r.private
+    } catch { }
+    if ($public -and -not $NewToken) {
+        Write-Ok "$($ucfg.repo) is public: no GitHub token needed"
+        if ($fromFile) { Invoke-Change 'delete github-token.txt (not needed: the repository is public)' { Remove-Item $plainFile -Force }.GetNewClosure() }
+    }
+    elseif ((Test-Path $tokenFile) -and -not $NewToken -and -not $fromFile) { Write-Ok "GitHub token stored (to enter a new one: add -NewToken)" }
     elseif ($TVUser -ne $env:USERNAME) { Write-Warn "sign in as $TVUser and run setup there to store the GitHub token (it is encrypted for that account)" }
     else {
         Write-Change "store a read-only GitHub token for $($ucfg.repo)$(if ($fromFile) { ' (from github-token.txt, then delete that file)' })"

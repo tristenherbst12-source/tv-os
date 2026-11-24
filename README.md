@@ -88,10 +88,9 @@ Type `SETUP` when it asks, and the `TV` account's Windows password when it asks 
 11. Sets Edge up for the TV windows (no account sign-in or sync in them, no welcome pages).
 12. Lets phones on the home network reach the phone remote (a firewall rule for the local network only). The
     network must be set to Private in Windows.
-13. Asks once for a GitHub token so the TV can see new versions (see "Updating the launcher"). Press Enter to
-    skip; `-NewToken` enters a new one later. Or bring it on the USB stick: a text file `github-token.txt` holding
-    only the token, in the `TVLauncher` folder. Setup stores it encrypted and deletes that file from the PC
-    (delete it from the stick yourself). It is never put in git.
+13. Checks that the TV can see new versions on GitHub (see "Updating the launcher"). The repository is public, so
+    nothing is needed. (Only if it is ever made private again: setup then asks for a read-only GitHub token, or
+    takes it from a `github-token.txt` on the USB stick, stores it encrypted and deletes the file.)
 
 You can run it again any time; it only changes what is different. To leave steps out, add for example
 `-Skip debloat,autologin`.
@@ -166,9 +165,7 @@ version is there, the home screen says **New Update Available** with **Update No
 Updates does the same by hand. Update Now downloads it, copies it over `C:\TVLauncher` (your settings stay) and
 restarts the home screen. If the update changed the setup, the TV says so: run setup once more (step 5).
 
-- The repository is private, so the TV needs a token that can only read it. On github.com: Settings > Developer
-  settings > Fine-grained tokens > Generate: only this repository, Contents: Read-only. Setup (step 13) asks for it
-  and stores it encrypted for the `TV` account.
+- The repository is public, so the TV needs no password or token to read it.
 - A new version is announced by raising the number in `VERSION` and pushing to `main`.
 
 **By hand** (the first time, or without internet): copy the new files over `C:\TVLauncher`, but keep your

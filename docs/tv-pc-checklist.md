@@ -82,7 +82,7 @@ For each of YouTube, Netflix, Prime Video, Disney+, DStv, F1TV, Twitch, Spotify:
       "localhost") and a QR code; the phone opens the remote page from it.
 - [ ] Arrows, OK, Back, Home, play/pause and volume work from the phone; typing a search into YouTube works;
       a button on the phone wakes the TV from standby.
-- [ ] Setup step 13 stored the GitHub token; Settings > Updates says "Up to Date" (not "needs a GitHub token").
+- [ ] Setup step 13 says the repository is public; Settings > Updates says "Up to Date".
 - [ ] After the next pushed version: the home screen shows "New Update Available"; Update Now installs it and the
       home screen comes back saying "Updated to ...".
 

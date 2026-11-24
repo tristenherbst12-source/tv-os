@@ -487,3 +487,8 @@ passes the pinned Play bar. Twitch home: the big featured stream is not a stop.
   tested: a real download (no token on this PC) and the restart on the TV.
 - **YouTube TV interface:** checked again with a Tizen user agent: still "You are being directed to youtube.com".
   Unchanged decision (see above): no further attempts, as that would mean defeating Google's browser checks.
+- **Repository made public (24 Nov):** a fine-grained token expires (at most a year), which would stop updates.
+  Public needs none: setup step 13 just confirms the repository is public; the helper sends a stored token only if
+  there is one and retries without it when GitHub refuses it (401). Checked before going public: no secrets in the
+  history (helper-token.js, github-token.* and settings are ignored; settings.json holds no PIN). Tested the real
+  check against the public repository with no token, and with a refused token stored.
