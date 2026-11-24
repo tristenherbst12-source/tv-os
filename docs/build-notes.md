@@ -461,3 +461,29 @@ account). Fixed in inject/tvnav.js:
 Not fixed: F1 TV's cookie pop-up and DStv's adverts live in cross-site frames (separate processes) the page script
 cannot reach (touchpad once; Down during a DStv advert moves behind the player). Spotify: Up from the first song
 passes the pinned Play bar. Twitch home: the big featured stream is not a stop.
+
+## Stage 6, round 9 (24 Nov 2026): phone remote, updates from GitHub
+- **Phone remote.** helper.ps1 runs a second HttpListener on `http://+:8766/` (settings.remotePort; falls back to
+  localhost without the URL reservation). `GET /` serves launcher/remote/index.html (a phone page in the launcher's
+  style: D-pad, OK, Back, Home, media keys, volume with a level bar, a "type on the TV" box with Press OK after and
+  Clear on TV, what Spotify plays). The buttons (`/api/key/*`, `/api/text`, `/api/erase`, `/api/status`) need the
+  header `X-Remote-Key`; the key is in helper.json (`remoteKey`) and reaches the phone only through the QR code's
+  `#k=` (the part after # is never sent to a server; the page keeps it in localStorage). Keys are sent with
+  SendInput (Native.cs `Keys`), so tv.ahk sees them like the real remote's (Home, volume pop-up) and they wake
+  standby. Test mode only sends them when a TV window is in front. QR: qrcode-generator 1.4.4 (MIT), vendored in
+  launcher/js/vendor. Setup step 12: `netsh http add urlacl` for the TV user and a firewall rule for LocalSubnet on
+  Private/Domain networks (warns when the network is Public); uninstall removes both. Tested here: pairing refused
+  without the key, status, keys, typing (incl. é), clearing; the page at phone size; the QR dialog.
+- **Updates.** config/updates.json names the repository (private: tristenherbst12-source/tv-os, main). The helper
+  reads `VERSION` and the latest commit through the GitHub API every 6 h (first 2 min after start) with the token
+  setup step 13 stores DPAPI-encrypted (`%LOCALAPPDATA%\TVLauncher\github-token.bin`; checked against the API before
+  it is saved). A higher VERSION is an update: js/update.js shows "New Update Available" (Update Now / Later, asked
+  again after 12 h), Settings > Updates checks and installs by hand. Install: zipball to %TEMP%\tv-update, then the
+  new version's scripts/apply-update.ps1 copies it over the install folder (robocopy /E, without settings.json,
+  helper-token.js, wake-report.txt; nothing is deleted), notes whether setup.ps1/setup-lib.ps1 changed, writes
+  last-update.json and stops the TV windows, hotkeys and helper; start.ps1 starts them again on the new files.
+  Refuses folders with .git. Tested here: the check (404 without a token is reported as "needs a GitHub token"),
+  the pop-up and its keys, the Settings row, the "Updated to" note, apply-update.ps1 on throwaway copies. Not
+  tested: a real download (no token on this PC) and the restart on the TV.
+- **YouTube TV interface:** checked again with a Tizen user agent: still "You are being directed to youtube.com".
+  Unchanged decision (see above): no further attempts, as that would mean defeating Google's browser checks.
