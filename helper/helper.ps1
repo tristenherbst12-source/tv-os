@@ -534,7 +534,7 @@ function Invoke-GitHub([string]$Path, [string]$Accept = 'application/vnd.github+
     if ($t) { $h.Authorization = "Bearer $t" }
     $uri = "https://api.github.com/repos/$($UpdateCfg.repo)$Path"
     if ($OutFile) { Invoke-WebRequest -Uri $uri -Headers $h -OutFile $OutFile -UseBasicParsing -TimeoutSec 120 | Out-Null; return }
-    return Invoke-RestMethod -Uri $uri -Headers $h -TimeoutSec 20
+    return Invoke-RestMethod -Uri $uri -Headers $h -TimeoutSec 20 -UseBasicParsing
 }
 # 0.12.0 vs 0.13.1: compares number by number.
 function Compare-Version([string]$a, [string]$b) {

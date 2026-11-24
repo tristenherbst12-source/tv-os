@@ -348,22 +348,37 @@ if (Want 'github') {
                 $sec = Read-Host '  GitHub token' -AsSecureString
                 $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)).Trim()
             }
+            # (only the token itself: a pasted line may carry quotes or a "token:" label)
+            $plain = [regex]::Match([string]$plain, '(github_pat_[A-Za-z0-9_]+|ghp_[A-Za-z0-9]+)').Value
+            if (-not $plain -and $fromFile) { Write-Host '  [failed] github-token.txt holds no GitHub token (they start with github_pat_)' -ForegroundColor Red }
             if ($plain) {
+                # Check it with GitHub first. Refused (401/403/404): not stored. GitHub not reachable right now (no
+                # internet yet, DNS): stored anyway, the TV checks again by itself.
+                $verdict = 'ok'; $why = ''
                 try {
                     $h = @{ Authorization = "Bearer $plain"; 'User-Agent' = 'tv-launcher'; Accept = 'application/vnd.github+json' }
                     [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
-                    Invoke-RestMethod "https://api.github.com/repos/$($ucfg.repo)" -Headers $h -TimeoutSec 20 | Out-Null
+                    Invoke-RestMethod "https://api.github.com/repos/$($ucfg.repo)" -Headers $h -TimeoutSec 20 -UseBasicParsing | Out-Null
+                } catch {
+                    $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+                    $why = $_.Exception.Message
+                    $verdict = if ($code -in 401, 403, 404) { 'refused' } else { 'unreachable' }
+                }
+                if ($verdict -eq 'refused') {
+                    Write-Host "  [failed] GitHub refused that token for $($ucfg.repo) ($why). Check that it has this repository with Contents: Read-only." -ForegroundColor Red
+                } else {
                     Add-Type -AssemblyName System.Security
                     $enc = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($plain), $null, 'CurrentUser')
                     New-Item -ItemType Directory -Force (Split-Path -Parent $tokenFile) | Out-Null
                     [IO.File]::WriteAllBytes($tokenFile, $enc)
-                    Write-Host '  [change] GitHub token checked and stored' -ForegroundColor Green
+                    if ($verdict -eq 'ok') { Write-Host '  [change] GitHub token checked and stored' -ForegroundColor Green }
+                    else { Write-Host "  [change] GitHub token stored, not checked: GitHub could not be reached ($why). Is the internet connected? Settings > Updates shows whether it works." -ForegroundColor Yellow }
                     if ($fromFile) {
                         Remove-Item $plainFile -Force
                         Write-Host '  [change] deleted github-token.txt from this PC (delete it from the USB stick too)' -ForegroundColor Green
                     }
-                } catch { Write-Host "  [failed] GitHub did not accept that token for $($ucfg.repo): $($_.Exception.Message)" -ForegroundColor Red }
-            } else { Write-Info 'skipped: no token (the TV will not see updates until setup stores one)' }
+                }
+            } elseif (-not $fromFile) { Write-Info 'skipped: no token (the TV will not see updates until setup stores one)' }
             $plain = $null
         }
     }
