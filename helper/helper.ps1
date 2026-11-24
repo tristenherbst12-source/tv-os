@@ -26,6 +26,8 @@
 #   POST /power/{standby|restart|shutdown}   (sleep = standby: screen off, muted, low power; a button ends it)
 #   GET  /standby                   {standby, since}
 #   GET  /remote-info               the phone remote's address and pairing link (for the QR code)
+#   GET  /update                    {current, latest, available, message, error, hasToken, lastUpdate}
+#   POST /update/check, POST /update/install, POST /update/seen (lastUpdate shown)
 # Phone remote (home network, port settings.remotePort, default 8766): GET / (the page); with header X-Remote-Key:
 #   GET /api/status, POST /api/key/{up|down|left|right|ok|back|home|playpause|next|prev|volup|voldown|mute},
 #   POST /api/text {text, enter}, POST /api/erase
@@ -507,6 +509,99 @@ function Get-Status {
     }
 }
 
+# ---------- updates ----------
+# New versions come from the GitHub repository in config/updates.json: a higher VERSION on its branch is a new
+# version. Checked soon after start and then every few hours (and from Settings > Updates). Installing downloads that
+# version and hands over to its own scripts\apply-update.ps1, which copies it over this folder and restarts.
+# The repository is private, so a read-only GitHub token is needed: setup stores it encrypted for this Windows user.
+Add-Type -AssemblyName System.Security
+[Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+$UpdateCfg = Read-JsonFile (Join-Path $TV.Config 'updates.json')
+$TokenFile = Join-Path $TV.Data 'github-token.bin'
+$Update = @{ current = $TV.Version; latest = $null; available = $false; message = ''; checkedAt = $null; error = $null; installing = $false }
+$NextUpdateCheck = (Get-Date).AddMinutes(2)
+$LastUpdateFile = Join-Path $TV.Data 'last-update.json'
+function Get-GitHubToken {
+    if (-not (Test-Path $TokenFile)) { return $null }
+    try {
+        $plain = [Security.Cryptography.ProtectedData]::Unprotect([IO.File]::ReadAllBytes($TokenFile), $null, 'CurrentUser')
+        return [Text.Encoding]::UTF8.GetString($plain).Trim()
+    } catch { Log "updates: the stored GitHub token could not be read: $($_.Exception.Message)"; return $null }
+}
+function Invoke-GitHub([string]$Path, [string]$Accept = 'application/vnd.github+json', [string]$OutFile) {
+    $h = @{ Accept = $Accept; 'User-Agent' = 'tv-launcher'; 'X-GitHub-Api-Version' = '2022-11-28' }
+    $t = Get-GitHubToken
+    if ($t) { $h.Authorization = "Bearer $t" }
+    $uri = "https://api.github.com/repos/$($UpdateCfg.repo)$Path"
+    if ($OutFile) { Invoke-WebRequest -Uri $uri -Headers $h -OutFile $OutFile -UseBasicParsing -TimeoutSec 120 | Out-Null; return }
+    return Invoke-RestMethod -Uri $uri -Headers $h -TimeoutSec 20
+}
+# 0.12.0 vs 0.13.1: compares number by number.
+function Compare-Version([string]$a, [string]$b) {
+    $x = @($a -split '\.' | ForEach-Object { [int]($_ -replace '\D', '') }); $y = @($b -split '\.' | ForEach-Object { [int]($_ -replace '\D', '') })
+    for ($i = 0; $i -lt [Math]::Max($x.Count, $y.Count); $i++) {
+        $p = if ($i -lt $x.Count) { $x[$i] } else { 0 }; $q = if ($i -lt $y.Count) { $y[$i] } else { 0 }
+        if ($p -ne $q) { return [Math]::Sign($p - $q) }
+    }
+    return 0
+}
+function Test-Update {
+    $script:NextUpdateCheck = (Get-Date).AddHours($(if ($UpdateCfg.checkHours) { [double]$UpdateCfg.checkHours } else { 6 }))
+    $Update.checkedAt = (Get-Date).ToString('o')
+    if (-not $UpdateCfg -or -not $UpdateCfg.repo) { $Update.error = 'no repository set'; return $Update }
+    try {
+        $ref = [uri]::EscapeDataString([string]$UpdateCfg.branch)
+        $latest = ([string](Invoke-GitHub "/contents/VERSION?ref=$ref" 'application/vnd.github.raw')).Trim()
+        $commit = Invoke-GitHub "/commits/$ref"
+        $Update.latest = $latest
+        $Update.message = ([string]$commit.commit.message -split "`n")[0]
+        $Update.date = [string]$commit.commit.committer.date
+        $Update.available = (Compare-Version $latest $TV.Version) -gt 0
+        $Update.error = $null
+        if ($Update.available) { Log "updates: $latest available (installed $($TV.Version)): $($Update.message)" }
+    } catch {
+        $code = try { [int]$_.Exception.Response.StatusCode } catch { 0 }
+        $Update.error = if (($code -eq 404 -or $code -eq 401) -and -not (Get-GitHubToken)) { 'needs a GitHub token (run setup)' }
+                        elseif ($code -eq 401 -or $code -eq 403 -or $code -eq 404) { 'the GitHub token was refused (run setup to enter a new one)' }
+                        else { 'could not reach GitHub' }
+        Log "updates: check failed ($code): $($_.Exception.Message)"
+    }
+    return $Update
+}
+function Start-UpdateInstall {
+    if ($Update.installing) { return @{ ok = $true; installing = $true } }
+    if (Test-Path (Join-Path $TV.Root '.git')) { return @{ ok = $false; error = 'this is a development copy: update it with git' } }
+    if ($TestMode) { Log 'TEST MODE: would install the update'; return @{ ok = $true; testMode = $true } }
+    $Update.installing = $true
+    try {
+        $work = Join-Path $env:TEMP 'tv-update'
+        if (Test-Path $work) { Remove-Item -Recurse -Force $work }
+        New-Item -ItemType Directory -Force $work | Out-Null
+        $zip = Join-Path $work 'update.zip'
+        Log "updates: downloading $($UpdateCfg.repo)@$($UpdateCfg.branch)"
+        Invoke-GitHub "/zipball/$([uri]::EscapeDataString([string]$UpdateCfg.branch))" 'application/vnd.github+json' $zip
+        Expand-Archive -Path $zip -DestinationPath $work -Force
+        $src = Get-ChildItem $work -Directory | Where-Object { Test-Path (Join-Path $_.FullName 'VERSION') } | Select-Object -First 1
+        if (-not $src) { throw 'the download holds no launcher' }
+        $script = Join-Path $src.FullName 'scripts\apply-update.ps1'
+        Log "updates: installing $(Get-Content (Join-Path $src.FullName 'VERSION') -TotalCount 1)"
+        Start-Process powershell.exe -WindowStyle Hidden -ArgumentList "-NoProfile -ExecutionPolicy Bypass -WindowStyle Hidden -File `"$script`" -Source `"$($src.FullName)`" -Target `"$($TV.Root)`""
+        return @{ ok = $true }
+    } catch {
+        $Update.installing = $false
+        Log "updates: install failed: $($_.Exception.Message)"
+        return @{ ok = $false; error = $_.Exception.Message }
+    }
+}
+# What the last update did (shown once on the home screen: "Updated to 0.13.0"; setup to run again if it changed).
+function Get-UpdateState {
+    $s = @{} + $Update
+    $s.hasToken = [bool](Test-Path $TokenFile)
+    $last = Read-JsonFile $LastUpdateFile
+    if ($last) { $s.lastUpdate = $last }
+    return $s
+}
+
 # ---------- phone remote ----------
 # A second, small web service on the home network (port settings.remotePort, default 8766): the remote page for a
 # phone (launcher/remote/index.html) and the buttons it presses. Every button needs the pairing key, which only the
@@ -738,6 +833,15 @@ function Handle-Request {
         '^POST /sleep-timer$' { $b = Read-Body $ctx; Send-Response $ctx 200 (Set-SleepTimer ([int]$b.minutes) ([string]$b.action)); return }
 
         '^POST /screen-off$' { Send-Response $ctx 200 (Invoke-Power 'screen-off' 'idle on home screen'); return }
+        '^GET /update$' { Send-Response $ctx 200 (Get-UpdateState); return }
+        '^POST /update/check$' { [void](Test-Update); Send-Response $ctx 200 (Get-UpdateState); return }
+        '^POST /update/install$' { Send-Response $ctx 200 (Start-UpdateInstall); return }
+        '^POST /update/seen$' { Remove-Item $LastUpdateFile -ErrorAction SilentlyContinue; Send-Response $ctx 200 @{ ok = $true }; return }
+        '^POST /update/fake$' {                 # test mode only: pretend a new version is out (to try the pop-up)
+            if (-not $TestMode) { Send-Response $ctx 403 @{ error = 'test mode only' }; return }
+            $Update.available = $true; $Update.latest = '9.9.9'; $Update.message = 'Test update (not real)'
+            Send-Response $ctx 200 (Get-UpdateState); return
+        }
         '^GET /remote-info$' { Send-Response $ctx 200 (Get-RemoteInfo); return }
         '^GET /standby$' { Send-Response $ctx 200 @{ standby = [bool]$Standby; since = $(if ($Standby) { $Standby.since.ToString('o') } else { $null }) }; return }
         '^POST /power/(sleep|standby|restart|shutdown)$' {
@@ -840,6 +944,7 @@ try {
         }
         try { Test-SleepTimer } catch { Log "sleep timer error: $($_.Exception.Message)" }
         try { Test-Standby } catch { Log "standby error: $($_.Exception.Message)" }
+        if ((Get-Date) -ge $NextUpdateCheck) { try { [void](Test-Update) } catch { Log "update check error: $($_.Exception.Message)" } }
         # Keep the launcher window alive (checked every 5 s).
         if ($ManageLauncher -and $Supervise -and ((Get-Date) - $lastCheck).TotalSeconds -ge 5) {
             $lastCheck = Get-Date

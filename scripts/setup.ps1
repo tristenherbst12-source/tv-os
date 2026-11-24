@@ -8,11 +8,12 @@
 #
 #   -TVUser <name>   the Windows account the TV runs as (default: the account running this)
 #   -Skip <steps>    leave out steps, e.g. -Skip debloat,autologin
-#                    (windows, timezone, debloat, updates, power, autologin, shell, install, apps, icons, edge, remote)
+#                    (windows, timezone, debloat, updates, power, autologin, shell, install, apps, icons, edge, remote, github)
 #   -Yes             do not ask for the confirmation word (with -Apply)
+#   -NewToken        enter a new GitHub token for updates (step 13)
 #
 # Undo with scripts\uninstall.ps1. See README.md.
-param([switch]$Apply, [string]$TVUser = $env:USERNAME, [string[]]$Skip = @(), [switch]$Yes)
+param([switch]$Apply, [string]$TVUser = $env:USERNAME, [string[]]$Skip = @(), [switch]$Yes, [switch]$NewToken)
 $ErrorActionPreference = 'Stop'
 . (Join-Path $PSScriptRoot 'setup-lib.ps1')
 $Script:ApplyChanges = [bool]$Apply
@@ -318,6 +319,41 @@ if (Want 'remote') {
     $prof = Get-NetConnectionProfile -ErrorAction SilentlyContinue | Where-Object { $_.IPv4Connectivity -ne 'Disconnected' } | Select-Object -First 1
     if ($prof -and $prof.NetworkCategory -eq 'Public') {
         Write-Warn "this network ($($prof.Name)) is set to Public: phones cannot reach the TV. Settings > Network > the network > Private."
+    }
+}
+
+# ---------- 13. Updates ----------
+# The TV checks the GitHub repository in config\updates.json for new versions. It is private, so the TV needs a
+# token that can only read it. Stored encrypted by Windows for the TV user (only that account can read it back).
+Write-Section '13. Updates from GitHub'
+if (Want 'github') {
+    $ucfg = Get-Content -Raw -Encoding UTF8 (Join-Path $Root 'config\updates.json') | ConvertFrom-Json
+    $tokenFile = Join-Path $user.LocalAppData 'TVLauncher\github-token.bin'
+    if ((Test-Path $tokenFile) -and -not $NewToken) { Write-Ok "GitHub token stored (to enter a new one: add -NewToken)" }
+    elseif ($TVUser -ne $env:USERNAME) { Write-Warn "sign in as $TVUser and run setup there to store the GitHub token (it is encrypted for that account)" }
+    else {
+        Write-Change "store a read-only GitHub token for $($ucfg.repo)"
+        if ($Apply) {
+            Write-Host ''
+            Write-Host "  The TV checks $($ucfg.repo) for new versions. Create a token at github.com > Settings >" -ForegroundColor Cyan
+            Write-Host '  Developer settings > Fine-grained tokens: only that repository, Contents: Read-only, no expiry' -ForegroundColor Cyan
+            Write-Host '  (or a long one). Paste it here (nothing shows while typing), or press Enter to skip.' -ForegroundColor Cyan
+            $sec = Read-Host '  GitHub token' -AsSecureString
+            $plain = [Runtime.InteropServices.Marshal]::PtrToStringBSTR([Runtime.InteropServices.Marshal]::SecureStringToBSTR($sec)).Trim()
+            if ($plain) {
+                try {
+                    $h = @{ Authorization = "Bearer $plain"; 'User-Agent' = 'tv-launcher'; Accept = 'application/vnd.github+json' }
+                    [Net.ServicePointManager]::SecurityProtocol = [Net.ServicePointManager]::SecurityProtocol -bor [Net.SecurityProtocolType]::Tls12
+                    Invoke-RestMethod "https://api.github.com/repos/$($ucfg.repo)" -Headers $h -TimeoutSec 20 | Out-Null
+                    Add-Type -AssemblyName System.Security
+                    $enc = [Security.Cryptography.ProtectedData]::Protect([Text.Encoding]::UTF8.GetBytes($plain), $null, 'CurrentUser')
+                    New-Item -ItemType Directory -Force (Split-Path -Parent $tokenFile) | Out-Null
+                    [IO.File]::WriteAllBytes($tokenFile, $enc)
+                    Write-Host '  [change] GitHub token checked and stored' -ForegroundColor Green
+                } catch { Write-Host "  [failed] GitHub did not accept that token for $($ucfg.repo): $($_.Exception.Message)" -ForegroundColor Red }
+            } else { Write-Info 'skipped: no token (the TV will not see updates until setup stores one)' }
+            $plain = $null
+        }
     }
 }
 } finally { Close-TVUser $user }

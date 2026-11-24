@@ -317,7 +317,7 @@
     // Screensaver after settings.screensaverMinutes (default 5) untouched on the home screen. Never over an app:
     // while one is in front, the home screen has no focus and the idle time keeps restarting (above).
     const saver = cfg.settings.screensaverMinutes == null ? 5 : Number(cfg.settings.screensaverMinutes) || 0;
-    if (saver && idle >= saver * 60000 && !TV.screensaver.active && !$('launch').classList.contains('show')) TV.screensaver.start();
+    if (saver && idle >= saver * 60000 && !TV.screensaver.active && !$('launch').classList.contains('show') && !TV.update.open) TV.screensaver.start();
     const mins = Number(cfg.settings.screenOffMinutes) || 0;
     if (!mins || screenOffSent || !TV.helper.available) return;
     if (idle < mins * 60000) return;
@@ -409,6 +409,10 @@
     startChip();
     drawNowPlaying();
     setInterval(drawNowPlaying, 5000);
+    // "New update available" (js/update.js): soon after start, every 10 minutes, and when back from an app.
+    setTimeout(TV.update.check, 8000);
+    setInterval(TV.update.check, 600000);
+    window.addEventListener('focus', () => setTimeout(TV.update.check, 1500));
   }
 
   start();

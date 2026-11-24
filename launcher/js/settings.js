@@ -198,6 +198,44 @@
     } catch (e) { TV.ui.toast(e.status === 403 ? 'Wrong PIN' : 'Could Not Open the Desktop'); }
   }
 
+  /* ---------- updates (helper.ps1 checks GitHub; js/update.js asks on the home screen) ---------- */
+  let updItem = null;
+  function updHint(s) {
+    if (!s) return 'Checking…';
+    if (s.installing) return 'Installing Version ' + s.latest + '…';
+    if (s.available) return 'Version ' + s.latest + ' Available (You Have ' + s.current + ')';
+    if (s.error) return 'Version ' + s.current + ' · ' + s.error.charAt(0).toUpperCase() + s.error.slice(1);
+    return 'Up to Date · Version ' + s.current;
+  }
+  async function showUpdateState(item, s) {
+    updItem = item;
+    if (!H.available) { item.setHint('Needs the Helper'); return; }
+    if (!s) { try { s = await H.request('/update'); } catch (e) { return; } }
+    item.setHint(s.checkedAt ? updHint(s) : 'Version ' + s.current + ' · Not Checked Yet');
+    const go = item.el.querySelector('.go');
+    if (go) go.textContent = s.available ? 'Update ›' : 'Check ›';
+    return s;
+  }
+  async function checkUpdates() {
+    if (!needHelper()) return;
+    let s;
+    try { s = await H.request('/update'); } catch (e) { TV.ui.toast('Could Not Check for Updates'); return; }
+    if (!s.available) {
+      updItem.setHint('Checking…');
+      try { s = await H.request('/update/check', { method: 'POST' }); } catch (e) { TV.ui.toast('Could Not Check for Updates'); return; }
+      await showUpdateState(updItem, s);
+      if (!s.available) { TV.ui.toast(s.error ? 'Could Not Check: ' + s.error : 'Up to Date'); return; }
+    }
+    const ok = await TV.ui.confirm({ title: 'Update to ' + s.latest + '?', text: (s.message ? s.message + '. ' : '') +
+      'The home screen restarts by itself after the download.', buttons: [{ label: 'Later', value: false }, { label: 'Update Now', value: true }] });
+    if (!ok) return;
+    try {
+      const r = await H.request('/update/install', { method: 'POST' });
+      if (!r.ok) throw new Error(r.error);
+      TV.ui.toast(r.testMode ? 'Test Mode: Would Install the Update Now' : 'Downloading the Update…', 4000);
+    } catch (e) { TV.ui.toast('Could Not Update' + (e.message ? ': ' + e.message : '')); }
+  }
+
   /* ---------- phone remote: a QR code the phone's camera opens (helper.ps1 serves the remote page) ---------- */
   async function showPhoneRemote() {
     if (!needHelper()) return;
@@ -343,6 +381,8 @@
       ctl: el('span', 'go', 'Show Code ›'), ok: showPhoneRemote });
 
     group('System');
+    const upd = goRow({ name: 'Updates', hint: 'Checking…', accent: '#8a8fb3', ctl: el('span', 'go', 'Check ›'), ok: checkUpdates });
+    showUpdateState(upd, null);
     goRow({ name: 'Restart Launcher', hint: 'Reloads This Home Screen', accent: '#8a8fb3', ctl: el('span', 'go', 'Restart ›'),
       ok: async () => {
         if (!needHelper()) return;

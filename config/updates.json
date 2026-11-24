@@ -1,0 +1,10 @@
+{
+  "repo": "tristenherbst12-source/tv-os",
+  "branch": "main",
+  "checkHours": 6,
+  "_notes": [
+    "Where the TV looks for new versions (helper.ps1, 'updates'). A higher number in VERSION on that branch is a new version.",
+    "The repository is private: setup asks once for a GitHub token that can only read it (fine-grained, Contents: read-only).",
+    "To announce an update: raise VERSION, commit, push."
+  ]
+}

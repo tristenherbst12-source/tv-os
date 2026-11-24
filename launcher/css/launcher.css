@@ -217,3 +217,22 @@ body.has-continue .label:not(.minor){margin-bottom:calc(var(--u)*1.8)}
 body.has-continue .hints{display:none}
 body.has-continue .rows .row.big + .label{margin-top:calc(var(--u)*2.2)}
 body.has-continue .rows .row.cont + .label{margin-top:calc(var(--u)*1.8)}
+
+/* ---------- "New update available" (js/update.js) ---------- */
+.upd{position:fixed;inset:0;z-index:40;display:grid;place-items:center;background:rgba(3,6,14,.5);
+  backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);opacity:0;transition:opacity .22s ease}
+.upd.show{opacity:1}
+.upd-card{width:calc(var(--u)*56);padding:calc(var(--u)*3.2) calc(var(--u)*3.6);border-radius:calc(var(--u)*2.4);text-align:center;
+  background:rgba(255,255,255,.1);border:1px solid rgba(255,255,255,.22);box-shadow:0 calc(var(--u)*3) calc(var(--u)*8) rgba(0,0,0,.45);
+  transform:scale(.94);transition:transform .28s cubic-bezier(.2,.9,.3,1.2)}
+.upd.show .upd-card{transform:scale(1)}
+.upd-icon{width:calc(var(--u)*6);height:calc(var(--u)*6);margin:0 auto calc(var(--u)*1.6);border-radius:50%;display:grid;place-items:center;
+  background:linear-gradient(180deg,#6f9bff,#4a74e0);box-shadow:0 calc(var(--u)*1) calc(var(--u)*3) rgba(74,116,224,.55)}
+.upd-icon svg{width:55%;height:55%;fill:none;stroke:#fff;stroke-width:2.2;stroke-linecap:round;stroke-linejoin:round}
+.upd-title{font-size:calc(var(--u)*2.6);font-weight:700;letter-spacing:-.02em}
+.upd-text{font-size:calc(var(--u)*1.45);color:var(--dim, rgba(255,255,255,.7));margin-top:calc(var(--u)*1);line-height:1.45}
+.upd-btns{display:flex;gap:calc(var(--u)*1.2);justify-content:center;margin-top:calc(var(--u)*2.6)}
+.upd-btn{min-width:calc(var(--u)*16);padding:calc(var(--u)*1.1) calc(var(--u)*2.4);border-radius:999px;font-size:calc(var(--u)*1.5);font-weight:650;
+  background:rgba(255,255,255,.12);border:1px solid rgba(255,255,255,.2);transition:transform .15s,background .15s,color .15s}
+.upd-btn.focus{background:#fff;color:#0b1222;transform:scale(1.06);box-shadow:0 0 0 calc(var(--u)*.3) rgba(255,255,255,.25)}
+body.lite .upd{backdrop-filter:none;-webkit-backdrop-filter:none;background:rgba(5,8,18,.9)}
